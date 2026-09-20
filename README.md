@@ -3,7 +3,7 @@
 Context management for LLM applications.
 
 <p>
-  <img src="https://img.shields.io/badge/version-1.1.0-7dcfff?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.1-7dcfff?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/typescript-strict-bb9af7?style=flat-square" alt="typescript">
   <img src="https://img.shields.io/badge/tests-bun-9ece6a?style=flat-square" alt="tests">
   <img src="https://img.shields.io/badge/license-MIT-e0af68?style=flat-square" alt="license">
@@ -28,13 +28,13 @@ Every LLM app treats context as a dumb message array. Mosaic treats it as manage
 ## Install
 
 ```bash
-npm install detailles/mosaic   # or: bun add detailles/mosaic
+npm install @detailles/mosaic   # or: bun add @detailles/mosaic
 ```
 
 ## Quick Start
 
 ```typescript
-import { ContextManager } from 'mosaic';
+import { ContextManager } from '@detailles/mosaic';
 
 const ctx = new ContextManager();
 
@@ -155,7 +155,7 @@ Scoped, read-only views that declare what each consumer needs.
 </p>
 
 ```typescript
-import { defineLens } from 'mosaic';
+import { defineLens } from '@detailles/mosaic';
 
 const routerLens = defineLens('router', {
   messages: { last: 1, maxChars: 200 },
@@ -214,7 +214,7 @@ Priority-based allocation that replaces naive message count caps.
 </p>
 
 ```typescript
-import { TokenBudget, estimateTokens } from 'mosaic';
+import { TokenBudget, estimateTokens } from '@detailles/mosaic';
 
 const budget = new TokenBudget({ limit: 8192, countTokens: estimateTokens });
 
@@ -308,7 +308,7 @@ Counts and limits are clamped defensively: `recent(0)` or a negative/NaN count r
 Convert lens views to prompt strings.
 
 ```typescript
-import { renderConversationSummary, renderRouterContext } from 'mosaic';
+import { renderConversationSummary, renderRouterContext } from '@detailles/mosaic';
 
 const summary = renderConversationSummary(ctx.through(synthesisLens));
 const routerCtx = renderRouterContext(ctx.through(routerLens));
@@ -370,7 +370,7 @@ A complete example showing how multiple agents share one `ContextManager`, each 
 </p>
 
 ```typescript
-import { ContextManager, defineLens, TokenBudget, estimateTokens } from 'mosaic';
+import { ContextManager, defineLens, TokenBudget, estimateTokens } from '@detailles/mosaic';
 
 // ── 1. Setup: shared context + slots ───────────────────────────────
 
@@ -470,7 +470,7 @@ Each agent only sees what it declared in its lens. The router gets 1 message and
 Mosaic accepts a logger via the `ILogger` interface. Default is no-op (silent).
 
 ```typescript
-import type { ILogger } from 'mosaic';
+import type { ILogger } from '@detailles/mosaic';
 
 const ctx = new ContextManager({
   logger: console,          // or winston, pino, or any { warn() }
@@ -482,7 +482,7 @@ const ctx = new ContextManager({
 Mosaic ships dual ESM and CommonJS builds:
 
 ```typescript
-import { ContextManager } from 'mosaic';         // ESM
+import { ContextManager } from '@detailles/mosaic';         // ESM
 const { ContextManager } = require('mosaic');     // CJS
 ```
 

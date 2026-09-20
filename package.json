@@ -1,28 +1,45 @@
 {
-  "name": "mosaic",
-  "version": "1.1.0",
+  "name": "@detailles/mosaic",
+  "version": "1.1.1",
   "description": "Context management for LLM applications — typed slots, lenses, transactions, token budgets",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/esm/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
     }
   },
-  "scripts": {
-    "build": "tsc && tsc -p tsconfig.cjs.json",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test"
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
   },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({type:'commonjs'}))\"",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prepublishOnly": "bun test && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/detailles/mosaic.git"
+  },
+  "keywords": [
+    "llm",
+    "context-management",
+    "token-budget",
+    "ai-agents",
+    "prompt-engineering"
+  ],
   "devDependencies": {
     "typescript": "^7.0.2"
   },
-  "files": [
-    "dist",
-    "src"
-  ],
   "license": "MIT"
 }
