@@ -234,7 +234,9 @@ export class ContextManager {
   /**
    * Register a typed slot. Redefining an existing name replaces the definition
    * but keeps the current value. Unset slots read as `undefined` — there is no
-   * default value; seed one explicitly with `set()` if needed.
+   * default value; seed one explicitly with `set()` if needed. (`null` is a
+   * stored value, distinct from unset: `has()` is `true` for it, but it is
+   * skipped by `slotsByPersistence()` and never rendered.)
    * @returns The slot definition to pass to `get`/`set`/`peek`/`has`/`clear`.
    */
   defineSlot<T>(
@@ -271,8 +273,12 @@ export class ContextManager {
 
   /**
    * Read a slot. During an open transaction, staged writes are visible
-   * (read-your-writes). Reading a `consume-once` slot consumes it: the value is
-   * cleared and cached lens views are invalidated. Unset slots return `undefined`.
+   * (read-your-writes). Unset slots return `undefined`.
+   *
+   * Reading a `consume-once` slot consumes it — the value is cleared and cached
+   * lens views are invalidated — but only when no transaction is open. During an
+   * open transaction the read sees the staged/committed value without consuming
+   * it (deliberate: the rollback semantics of consumption are undefined).
    */
   get<T>(slot: SlotDef<T>): T | undefined {
     // During an active transaction, prefer staged writes (read-your-writes)
@@ -371,8 +377,10 @@ export class ContextManager {
   }
 
   /**
-   * True when the slot currently holds a value (not `undefined`). During an open
-   * transaction this reflects staged changes, consistent with `get()`.
+   * True when the slot currently holds a value. Unset means `undefined`; `null`
+   * is a stored value, so `has()` returns `true` for it — but `null` values are
+   * skipped by `slotsByPersistence()` and never rendered to the LLM. During an
+   * open transaction this reflects staged changes, consistent with `get()`.
    */
   has(slot: Pick<SlotDef, 'name'>): boolean {
     // Reads see your writes within the same turn: during an open transaction,
@@ -556,7 +564,9 @@ export class ContextManager {
   }
 
   /**
-   * Open a transaction staging slot mutations for one turn.
+   * Open a transaction staging slot mutations for one turn. The returned handle
+   * is trusted: writes through it bypass slot-ownership checks — use
+   * `ctx.as(owner).set(...)` where enforcement is needed.
    * @throws If a transaction is already open.
    */
   beginTurn(): TurnTransaction {
@@ -582,8 +592,13 @@ export class ContextManager {
    * Advance the turn counter and clear turn-scoped state: `turn-scoped` slot
    * values and all knowledge chunks. Invalidates cached lens views.
    * @returns The new turn count.
+   * @throws If a transaction is open — advancing would mutate committed state
+   *   behind the transaction's back. Commit or roll back first.
    */
   nextTurn(): number {
+    if (this._activeTransaction?.status === 'open') {
+      throw new Error('[Mosaic] Cannot advance turn while a transaction is open');
+    }
     this._turnCount++;
 
     // Clear turn-scoped slots
@@ -622,9 +637,14 @@ export class ContextManager {
   /**
    * Serialize the full context — messages (timestamps as ISO strings), slot
    * values (via each slot's `serialize` when defined), and the turn count.
-   * Captures committed state; knowledge chunks are not included.
+   * Knowledge chunks are not included.
+   * @throws If a transaction is open — a snapshot then would silently drop the
+   *   staged changes. Commit or roll back first.
    */
   snapshot(): ContextSnapshot {
+    if (this._activeTransaction?.status === 'open') {
+      throw new Error('[Mosaic] Cannot snapshot while a transaction is open');
+    }
     const serializedSlots: Record<string, unknown> = {};
     for (const [name, state] of this.slots) {
       if (state.value === undefined) continue;
@@ -741,6 +761,11 @@ export class ScopedContextManager {
 /**
  * TurnTransaction — buffers slot mutations and applies them atomically.
  * Reads see staged values (read-your-writes semantics).
+ *
+ * The handle is trusted: writes through `transaction.set()`/`clear()` do NOT
+ * re-check slot ownership. Callers that need ownership enforcement write via
+ * `ctx.as(owner).set(...)` — the scoped write is ownership-checked and then
+ * forwarded into the open transaction.
  */
 export class TurnTransaction {
   /** Internal: staged changes by slot name; read by the owning context for read-your-writes. */

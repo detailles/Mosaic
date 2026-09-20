@@ -81,6 +81,19 @@ describe('TokenBudget.compile() sectionUsage', () => {
 });
 
 describe('TokenBudget.compile() boundary conditions', () => {
+  it('throws when a section name is reserved twice (names key the compile result)', () => {
+    // Pins O5: duplicate names silently collided in compile()'s name-keyed
+    // paths — the second reserve must fail fast and leave the first intact.
+    const budget = new TokenBudget({ limit: 100, countTokens: estimateTokens });
+    budget.reserve('system', 'first');
+    expect(() => budget.reserve('system', 'second')).toThrow('Budget section "system" is already reserved');
+    expect(() => budget.reserveItems('system', [{ content: 'third' }])).toThrow('Budget section "system" is already reserved');
+
+    // The original reservation is untouched and still compiles.
+    const result = budget.compile();
+    expect(result.sections.system).toEqual(['first']);
+  });
+
   it('keeps every section when the total exactly equals the limit (inclusive boundary)', () => {
     // Pins the <= boundary: an exact fit must not trigger the shrink/drop path.
     const budget = new TokenBudget({ limit: 25, countTokens: estimateTokens });

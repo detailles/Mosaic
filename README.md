@@ -3,7 +3,7 @@
 Context management for LLM applications.
 
 <p>
-  <img src="https://img.shields.io/badge/version-1.0.1-7dcfff?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.2-7dcfff?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/typescript-strict-bb9af7?style=flat-square" alt="typescript">
   <img src="https://img.shields.io/badge/tests-bun-9ece6a?style=flat-square" alt="tests">
   <img src="https://img.shields.io/badge/license-MIT-e0af68?style=flat-square" alt="license">

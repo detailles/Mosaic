@@ -549,6 +549,42 @@ describe('TurnTransaction', () => {
     expect(ctx.transaction).toBeNull();
   });
 
+  it('nextTurn() refuses while a transaction is open; works again after commit or rollback', () => {
+    // Pins O2: advancing mid-transaction would mutate committed state behind
+    // the transaction's back — it must fail loudly and leave nothing wedged.
+    const ctx = new ContextManager();
+    const turn = ctx.beginTurn();
+    expect(() => ctx.nextTurn()).toThrow('Cannot advance turn while a transaction is open');
+    expect(ctx.turnCount).toBe(0); // counter untouched by the refused call
+    turn.commit();
+    expect(ctx.nextTurn()).toBe(1);
+
+    const ctx2 = new ContextManager();
+    const turn2 = ctx2.beginTurn();
+    expect(() => ctx2.nextTurn()).toThrow('Cannot advance turn while a transaction is open');
+    turn2.rollback();
+    expect(ctx2.nextTurn()).toBe(1);
+  });
+
+  it('snapshot() refuses while a transaction is open; works after commit or rollback', () => {
+    // Pins O8: a mid-transaction snapshot would silently drop staged changes.
+    const ctx = new ContextManager();
+    const product = ctx.defineSlot<string>('product');
+    ctx.set(product, 'committed');
+
+    const turn = ctx.beginTurn();
+    turn.set(product, 'staged');
+    expect(() => ctx.snapshot()).toThrow('Cannot snapshot while a transaction is open');
+    turn.rollback();
+    expect(ctx.snapshot().slots.product).toBe('committed');
+
+    const turn2 = ctx.beginTurn();
+    turn2.set(product, 'new-value');
+    expect(() => ctx.snapshot()).toThrow('Cannot snapshot while a transaction is open');
+    turn2.commit();
+    expect(ctx.snapshot().slots.product).toBe('new-value');
+  });
+
   // ── ctx.set during an open transaction ─────────────────────────────
   //
   // These tests pin the behavior of ctx.set() when a transaction is open.

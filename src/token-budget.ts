@@ -112,6 +112,7 @@ export class TokenBudget {
 
   /**
    * Reserve a section of the budget with string content.
+   * @throws If a section with the same name is already reserved.
    */
   reserve(name: string, content: string, options?: ReserveOptions): void {
     this.reserveItems(name, [{ content }], options);
@@ -120,8 +121,13 @@ export class TokenBudget {
   /**
    * Reserve a section with multiple items (messages, chunks, etc.).
    * Each item has content and an optional score (for rank strategy).
+   * @throws If a section with the same name is already reserved — names are
+   *   unique because compile results are keyed by section name.
    */
   reserveItems(name: string, items: ScoredItem[], options?: ReserveOptions): void {
+    if (this.sections.some((s) => s.name === name)) {
+      throw new Error(`[Mosaic] Budget section "${name}" is already reserved`);
+    }
     const priority = options?.priority ?? 'medium';
     const totalTokens = items.reduce((sum, item) => sum + this.countTokens(item.content), 0);
 
