@@ -262,4 +262,26 @@ describe('TokenBudget tokenizer-aware truncate', () => {
     expect(result.sections.doc).toEqual(['']);
     expect(result.sectionUsage.doc).toBe(0);
   });
+
+  it('never exceeds the target under a non-monotone counter (fit guarantee, not max retention)', () => {
+    // Pins the honest truncate contract: real tokenizers are not monotone over
+    // prefixes — 'international' merges into one cheap span below, mimicking
+    // tiktoken BPE merges — so binary search may stop short of the longest
+    // fitting prefix. What must ALWAYS hold: the emitted cut fits the target.
+    const mergeTokens = (t: string) => t.replace(/international/g, 'I').length;
+    const content = `international${'x'.repeat(50)}`; // full: 1 + 50 = 51 tokens
+    const budget = new TokenBudget({ limit: 55, countTokens: mergeTokens });
+    budget.reserve('doc', content, { priority: 'medium', strategy: 'truncate' });
+    budget.reserve('fixed', 'y'.repeat(51), { priority: 'high' }); // 51 tokens; overflow 47 → target 4
+
+    const result = budget.compile();
+    const truncated = result.sections.doc[0];
+    // Fit guarantee: never exceeds the shrink target, ellipsis included.
+    expect(mergeTokens(truncated)).toBeLessThanOrEqual(4);
+    // Non-maximality is accepted behavior: 'international...' would also cost
+    // exactly 4 (1 + 3), yet the search legitimately lands on a shorter cut.
+    expect(mergeTokens('international...')).toBe(4);
+    expect(truncated.length).toBeLessThan('international...'.length);
+    expect(truncated.endsWith('...')).toBe(true);
+  });
 });

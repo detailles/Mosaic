@@ -337,8 +337,11 @@ export class TokenBudget {
 
   /** Hard truncate the joined content to fit targetTokens, measured with the
    *  budget's own token counter: content that already fits is returned whole;
-   *  otherwise the longest prefix whose token count (including the '...'
-   *  suffix) fits is found by binary search. */
+   *  otherwise a fitting prefix is cut by binary search and '...' appended.
+   *  The contract is the FIT GUARANTEE — the result never exceeds targetTokens
+   *  by the counter's measure — not maximum retention: real tokenizers are not
+   *  monotone over prefixes (a longer prefix can tokenize cheaper), so the
+   *  search may stop short of the longest fitting prefix. */
   private shrinkTruncate(items: ScoredItem[], targetTokens: number): ScoredItem[] {
     if (items.length === 0) return [];
 
@@ -350,9 +353,11 @@ export class TokenBudget {
     // Even the ellipsis does not fit — emit nothing rather than exceed the target.
     if (this.countTokens(ELLIPSIS) > targetTokens) return [{ content: '' }];
 
-    // Binary search the longest prefix that fits with the ellipsis appended.
-    // Invariant: lo fits, hi does not. (Assumes the counter is non-decreasing
-    // over prefixes — true of any real tokenizer.)
+    // Binary search a fitting prefix with the ellipsis appended. Invariant
+    // maintained: lo fits, hi does not — the result always fits. It is NOT
+    // necessarily the longest fitting prefix: token counts are not
+    // non-decreasing over prefixes for real tokenizers (e.g. tiktoken merges
+    // 'international' into a single token), so maximality is not contracted.
     let lo = 0;
     let hi = combined.length;
     while (hi - lo > 1) {
