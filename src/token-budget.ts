@@ -87,11 +87,24 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+/**
+ * Priority-based token allocator. Sections are reserved with content and a
+ * priority, then `compile()` fits them within the limit: droppable sections are
+ * cut first (lowest priority first), then shrinkable sections are reduced via
+ * their strategy. `fixed` sections are never dropped or shrunk, so the result
+ * can exceed the limit when fixed content alone overflows.
+ */
 export class TokenBudget {
   private sections: BudgetSection[] = [];
   private readonly countTokens: TokenCounter;
   private readonly limit: number;
 
+  /**
+   * @param options.limit - Total token budget. A non-positive limit means every
+   *   section overflows.
+   * @param options.countTokens - Token counter for content strings (default:
+   *   {@link estimateTokens}, ~4 chars per token).
+   */
   constructor(options: { limit: number; countTokens?: TokenCounter }) {
     this.limit = options.limit;
     this.countTokens = options.countTokens ?? estimateTokens;

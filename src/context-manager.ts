@@ -29,6 +29,13 @@ import type {
 /** No-op logger — used when no logger is provided */
 const NOOP_LOGGER: ILogger = { warn: () => {} };
 
+/**
+ * ContextManager — owns the full conversation context: messages, typed slots,
+ * and knowledge chunks. Slots are strict (unset reads return `undefined` — no
+ * silent defaults); reads through `get()`/`has()`/`through()` see staged writes
+ * of the open transaction (read-your-writes), while `peek()` always reads
+ * committed state. At most one transaction may be open at a time.
+ */
 export class ContextManager {
   private _messages: CtxMessage[] = [];
   private slots: Map<string, SlotState> = new Map();
@@ -42,6 +49,11 @@ export class ContextManager {
 
   private readonly maxMessages: number;
 
+  /**
+   * @param options.maxMessages - Cap on retained messages; the oldest are trimmed
+   *   once the cap is exceeded (default 50; `0` disables trimming).
+   * @param options.logger - Receives soft-enforcement warnings (default: silent no-op).
+   */
   constructor(options?: { maxMessages?: number; logger?: ILogger }) {
     this.maxMessages = options?.maxMessages ?? 50;
     this.logger = options?.logger ?? NOOP_LOGGER;
@@ -57,6 +69,7 @@ export class ContextManager {
 
   // ── Message Operations ──────────────────────────────────────────
 
+  /** Append a message and trim to `maxMessages`. Invalidates cached lens views. */
   addMessage(role: MessageRole, content: string, options?: { metadata?: Record<string, unknown>; tags?: Record<string, string> }): void {
     this._messages.push({
       role,
@@ -72,16 +85,19 @@ export class ContextManager {
     this._viewCache.clear();
   }
 
+  /** All retained messages, oldest first. The array is live — do not mutate it. */
   allMessages(): readonly CtxMessage[] {
     return this.getMessages();
   }
 
+  /** Number of retained messages (after `maxMessages` trimming). */
   get messageCount(): number {
     return this.getMessages().length;
   }
 
   // ── Message Queries ─────────────────────────────────────────────
 
+  /** The most recent message with the given role, or `undefined` if none exists. */
   lastByRole(role: MessageRole): CtxMessage | undefined {
     const msgs = this.getMessages();
     for (let i = msgs.length - 1; i >= 0; i--) {
@@ -92,6 +108,10 @@ export class ContextManager {
     return undefined;
   }
 
+  /**
+   * The `count` most recent messages, oldest first. `options.filter` is applied
+   * after slicing, so it can only shrink the result below `count`.
+   */
   recent(count: number, options?: RecentOptions): CtxMessage[] {
     const msgs = this.getMessages();
     const slice = msgs.slice(-count);
@@ -99,6 +119,10 @@ export class ContextManager {
     return [...slice].filter(options.filter);
   }
 
+  /**
+   * The `count` most recent adjacent user→assistant exchanges, oldest first.
+   * Messages without an adjacent counterpart (system lines, orphans) are skipped.
+   */
   recentPairs(count: number): MessagePair[] {
     const msgs = this.getMessages();
     const pairs: MessagePair[] = [];
@@ -116,6 +140,7 @@ export class ContextManager {
     return pairs;
   }
 
+  /** Conversation depth: the number of user messages in the full retained history. */
   depth(): number {
     let count = 0;
     for (const msg of this.getMessages()) {
@@ -124,6 +149,11 @@ export class ContextManager {
     return count;
   }
 
+  /**
+   * Case-insensitive substring search over message content, most recent match first.
+   * `options.role` restricts by role; `options.limit` caps the number of matches
+   * (a falsy limit means unbounded).
+   */
   search(query: string, options?: { limit?: number; role?: MessageRole }): CtxMessage[] {
     const lowerQuery = query.toLowerCase();
     const results: CtxMessage[] = [];
@@ -141,10 +171,12 @@ export class ContextManager {
     return results;
   }
 
+  /** All messages carrying the exact tag `tagName: tagValue`, in history order. */
   getByTag(tagName: string, tagValue: string): CtxMessage[] {
     return [...this.getMessages()].filter((msg) => msg.tags?.[tagName] === tagValue);
   }
 
+  /** True when the most recent assistant message carries the exact tag `tagName: tagValue`. */
   lastAssistantHasTag(tagName: string, tagValue: string): boolean {
     const last = this.lastByRole('assistant');
     return last?.tags?.[tagName] === tagValue;
@@ -199,6 +231,12 @@ export class ContextManager {
 
   // ── Slot Operations ─────────────────────────────────────────────
 
+  /**
+   * Register a typed slot. Redefining an existing name replaces the definition
+   * but keeps the current value. Unset slots read as `undefined` — there is no
+   * default value; seed one explicitly with `set()` if needed.
+   * @returns The slot definition to pass to `get`/`set`/`peek`/`has`/`clear`.
+   */
   defineSlot<T>(
     name: string,
     options?: {
@@ -231,6 +269,11 @@ export class ContextManager {
     return def;
   }
 
+  /**
+   * Read a slot. During an open transaction, staged writes are visible
+   * (read-your-writes). Reading a `consume-once` slot consumes it: the value is
+   * cleared and cached lens views are invalidated. Unset slots return `undefined`.
+   */
   get<T>(slot: SlotDef<T>): T | undefined {
     // During an active transaction, prefer staged writes (read-your-writes)
     if (this._activeTransaction?.status === 'open') {
@@ -245,17 +288,30 @@ export class ContextManager {
     const def = this.slotDefs.get(slot.name);
     if (def?.lifecycle === 'consume-once') {
       state.value = undefined;
+      // Consuming is a mutation: cached lens views holding the pre-consume value are stale.
+      this._viewCache.clear();
     }
 
     return value;
   }
 
+  /**
+   * Read committed state directly: bypasses an open transaction's staged writes
+   * and never consumes a `consume-once` slot. Unset slots return `undefined`.
+   */
   peek<T>(slot: SlotDef<T>): T | undefined {
     const state = this.slots.get(slot.name);
     if (!state || state.value === undefined) return undefined;
     return state.value as T;
   }
 
+  /**
+   * Write a slot. Throws if the caller identity (set via `as()`) is not an owner
+   * of the slot. While a transaction is open the write is staged into it, so
+   * `rollback()` undoes it and `commit()` applies it atomically. Object values
+   * are stored as isolated deep-frozen copies: mutating a value you passed in or
+   * read out cannot change committed state.
+   */
   set<T>(slot: SlotDef<T>, value: T): void {
     const def = this.slotDefs.get(slot.name);
     if (def?.owner && this._callerIdentity) {
@@ -314,11 +370,24 @@ export class ContextManager {
     this._viewCache.clear();
   }
 
+  /**
+   * True when the slot currently holds a value (not `undefined`). During an open
+   * transaction this reflects staged changes, consistent with `get()`.
+   */
   has(slot: Pick<SlotDef, 'name'>): boolean {
+    // Reads see your writes within the same turn: during an open transaction,
+    // has() answers about the staged value, same as get().
+    if (this._activeTransaction?.status === 'open') {
+      return this._effective(slot.name) !== undefined;
+    }
     const state = this.slots.get(slot.name);
     return state !== undefined && state.value !== undefined;
   }
 
+  /**
+   * Reset a slot to unset (`undefined`). Ownership is enforced exactly as for
+   * `set()`; while a transaction is open the clear is staged into it.
+   */
   clear(slot: Pick<SlotDef, 'name'>): void {
     // Ownership applies to clear exactly as to set: a foreign owner cannot erase a slot either.
     const def = this.slotDefs.get(slot.name);
@@ -344,6 +413,10 @@ export class ContextManager {
     }
   }
 
+  /**
+   * Committed values of all defined slots, keyed by name (unset slots appear as
+   * `undefined`). Ignores staged transaction changes.
+   */
   allSlots(): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     for (const [name, state] of this.slots) {
@@ -352,11 +425,6 @@ export class ContextManager {
     return result;
   }
 
-  /**
-   * Get slot values grouped by persistence type — for token budget integration.
-   * Static slots should be reserved with high priority (not droppable).
-   * Transient slots should be reserved with low priority (droppable).
-   */
   /**
    * Get slot values grouped by persistence type — for token budget integration.
    * - static: reserve with high priority (not droppable)
@@ -376,6 +444,11 @@ export class ContextManager {
 
   // ── Inspection ─────────────────────────────────────────────────
 
+  /**
+   * Structured readout of the full context state — message/turn counts and
+   * per-slot value, lifecycle, persistence, owner, and write metadata.
+   * Reflects committed state (staged transaction changes are not included).
+   */
   inspect(): ContextInspection {
     const slotEntries: ContextInspection['slots'] = {};
     for (const [name, state] of this.slots) {
@@ -477,10 +550,15 @@ export class ContextManager {
 
   // ── Transactions ───────────────────────────────────────────────
 
+  /** The currently active transaction, or `null` when no turn is open. */
   get transaction(): TurnTransaction | null {
     return this._activeTransaction;
   }
 
+  /**
+   * Open a transaction staging slot mutations for one turn.
+   * @throws If a transaction is already open.
+   */
   beginTurn(): TurnTransaction {
     if (this._activeTransaction?.status === 'open') {
       throw new Error('[Mosaic] Cannot begin a new turn — a transaction is already open');
@@ -495,10 +573,16 @@ export class ContextManager {
 
   // ── Turn Tracking ───────────────────────────────────────────────
 
+  /** Number of completed turns — incremented by `nextTurn()`, restored by `restore()`. */
   get turnCount(): number {
     return this._turnCount;
   }
 
+  /**
+   * Advance the turn counter and clear turn-scoped state: `turn-scoped` slot
+   * values and all knowledge chunks. Invalidates cached lens views.
+   * @returns The new turn count.
+   */
   nextTurn(): number {
     this._turnCount++;
 
@@ -521,6 +605,10 @@ export class ContextManager {
 
   // ── Scoped Access ───────────────────────────────────────────────
 
+  /**
+   * A scoped handle that writes under the given identity, so `owner`-restricted
+   * slots can enforce who may write. Reads behave exactly as on this context.
+   */
   as(identity: string): ScopedContextManager {
     return new ScopedContextManager(this, identity);
   }
@@ -531,6 +619,11 @@ export class ContextManager {
 
   // ── Serialization ───────────────────────────────────────────────
 
+  /**
+   * Serialize the full context — messages (timestamps as ISO strings), slot
+   * values (via each slot's `serialize` when defined), and the turn count.
+   * Captures committed state; knowledge chunks are not included.
+   */
   snapshot(): ContextSnapshot {
     const serializedSlots: Record<string, unknown> = {};
     for (const [name, state] of this.slots) {
@@ -594,6 +687,8 @@ export class ContextManager {
 
 /**
  * ScopedContextManager — tags writes with a caller identity for ownership enforcement.
+ * Read methods delegate unchanged; `set`/`clear` run under the scoped identity and
+ * throw when the identity is not an owner of the slot.
  */
 export class ScopedContextManager {
   constructor(
@@ -601,14 +696,20 @@ export class ScopedContextManager {
     private readonly identity: string
   ) {}
 
+  /** Read a slot — identical to `ContextManager.get()`. */
   get<T>(slot: SlotDef<T>): T | undefined {
     return this.ctx.get(slot);
   }
 
+  /** Read committed state — identical to `ContextManager.peek()`. */
   peek<T>(slot: SlotDef<T>): T | undefined {
     return this.ctx.peek(slot);
   }
 
+  /**
+   * Write a slot under this handle's identity.
+   * @throws If the identity is not in the slot's `owner` list.
+   */
   set<T>(slot: SlotDef<T>, value: T): void {
     this.ctx._setCallerIdentity(this.identity);
     try {
@@ -618,10 +719,15 @@ export class ScopedContextManager {
     }
   }
 
+  /** True when the slot holds a value — identical to `ContextManager.has()`. */
   has(slot: Pick<SlotDef, 'name'>): boolean {
     return this.ctx.has(slot);
   }
 
+  /**
+   * Clear a slot under this handle's identity.
+   * @throws If the identity is not in the slot's `owner` list.
+   */
   clear(slot: Pick<SlotDef, 'name'>): void {
     this.ctx._setCallerIdentity(this.identity);
     try {
@@ -643,10 +749,16 @@ export class TurnTransaction {
 
   constructor(private readonly ctx: ContextManager) {}
 
+  /** Lifecycle state of this transaction: `open`, `committed`, or `rolled-back`. */
   get status(): 'open' | 'committed' | 'rolled-back' {
     return this._status;
   }
 
+  /**
+   * Stage a slot write. The last operation on a slot wins; staging a value equal
+   * to the committed value cancels any earlier staged change for that slot.
+   * @throws If the transaction is no longer open.
+   */
   set<T>(slot: SlotDef<T>, value: T): void {
     this.assertOpen();
     const previousValue = this.ctx.peek(slot);
@@ -668,6 +780,11 @@ export class TurnTransaction {
     this.ctx._invalidateViews();
   }
 
+  /**
+   * Stage a slot clear. Clearing a slot that holds no committed value cancels
+   * any earlier staged change for that slot (ends unset).
+   * @throws If the transaction is no longer open.
+   */
   clear(slot: Pick<SlotDef, 'name'>): void {
     this.assertOpen();
     const previousValue = this.ctx.peek(slot);
@@ -688,6 +805,7 @@ export class TurnTransaction {
     this.ctx._invalidateViews();
   }
 
+  /** Read a slot as this transaction sees it: staged change first, otherwise committed state. */
   get<T>(slot: SlotDef<T>): T | undefined {
     const change = this.staged.get(slot.name);
     if (change) {
@@ -696,6 +814,7 @@ export class TurnTransaction {
     return this.ctx.peek(slot);
   }
 
+  /** What `commit()` would apply right now: staged changes and current status. */
   summary(): TransactionSummary {
     return {
       changeCount: this.staged.size,
@@ -704,6 +823,11 @@ export class TurnTransaction {
     };
   }
 
+  /**
+   * Apply all staged changes atomically and close the transaction. The context's
+   * active transaction is cleared; further use of this handle throws.
+   * @throws If the transaction is no longer open.
+   */
   commit(): void {
     this.assertOpen();
 
@@ -723,6 +847,11 @@ export class TurnTransaction {
     this.ctx._clearTransaction();
   }
 
+  /**
+   * Discard all staged changes and close the transaction; committed state is left
+   * untouched and lens views cached while changes were staged are invalidated.
+   * @throws If the transaction is no longer open.
+   */
   rollback(): void {
     this.assertOpen();
     this.staged.clear();

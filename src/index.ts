@@ -30,7 +30,7 @@ export type {
   TransactionSummary,
 } from './types.js';
 
-/** Convenience helper to create a lens definition */
+/** Convenience helper to create a lens definition: `defineLens('router', { ... })` is `{ name: 'router', ... }`. */
 export function defineLens(name: string, config: Omit<import('./types.js').LensDef, 'name'>): import('./types.js').LensDef {
   return { name, ...config };
 }

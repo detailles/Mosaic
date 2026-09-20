@@ -978,4 +978,51 @@ describe('Transaction and view invariants for typed-state integrations', () => {
     turn.rollback();
     expect(ctx.peek(objects)).toEqual({ items: ['a'] });
   });
+
+  it('consuming a consume-once slot invalidates cached lens views (consumption is a mutation)', () => {
+    const ctx = new ContextManager();
+    const signal = ctx.defineSlot<string>('signal', { lifecycle: 'consume-once' });
+    ctx.set(signal, 'fire');
+    const lens = { name: 'render', slots: ['signal'] as string[] };
+    // Build + cache the view while the value is present.
+    expect(ctx.through(lens).slots.signal).toBe('fire');
+    // get() consumes the value — a cached view must not keep serving it.
+    expect(ctx.get(signal)).toBe('fire');
+    expect(ctx.through(lens).slots.signal).toBeUndefined();
+  });
+
+  it('has() sees staged changes during an open transaction, same as get() (read-your-writes)', () => {
+    const ctx = new ContextManager();
+    const product = ctx.defineSlot<string>('product');
+    const pending = ctx.defineSlot<string>('pending');
+    ctx.set(product, 'MODEL-A');
+
+    const turn = ctx.beginTurn();
+    turn.set(pending, 'staged');
+    expect(ctx.get(pending)).toBe('staged');
+    expect(ctx.has(pending)).toBe(true); // staged set is visible
+    turn.clear(product);
+    expect(ctx.get(product)).toBeUndefined();
+    expect(ctx.has(product)).toBe(false); // staged clear is visible
+    turn.rollback();
+
+    expect(ctx.has(product)).toBe(true);
+    expect(ctx.has(pending)).toBe(false);
+  });
+
+  it('a cached lens view is invalidated when knowledge changes (addKnowledge / clearKnowledge)', () => {
+    // Cache-invalidation coverage: slot writes, restore and rollback are pinned
+    // elsewhere; knowledge mutation was the remaining mutation type without a
+    // staleness pin.
+    const ctx = new ContextManager();
+    const lens = { name: 'render', knowledge: { top: 5 } };
+    ctx.addKnowledge('rag', [{ content: 'first', score: 0.9 }]);
+    expect(ctx.through(lens).knowledge.map((k) => k.content)).toEqual(['first']);
+
+    ctx.addKnowledge('rag', [{ content: 'second', score: 0.95 }]);
+    expect(ctx.through(lens).knowledge.map((k) => k.content)).toEqual(['second', 'first']);
+
+    ctx.clearKnowledge();
+    expect(ctx.through(lens).knowledge).toHaveLength(0);
+  });
 });

@@ -79,3 +79,46 @@ describe('TokenBudget.compile() sectionUsage', () => {
     expect(totalFromSections).toBe(result.usage.used);
   });
 });
+
+describe('TokenBudget.compile() boundary conditions', () => {
+  it('keeps every section when the total exactly equals the limit (inclusive boundary)', () => {
+    // Pins the <= boundary: an exact fit must not trigger the shrink/drop path.
+    const budget = new TokenBudget({ limit: 25, countTokens: estimateTokens });
+    budget.reserve('system', 'A'.repeat(40), { priority: 'fixed' }); // 10 tokens
+    budget.reserve('history', 'B'.repeat(60), { priority: 'high', strategy: 'tail' }); // 15 tokens
+
+    const result = budget.compile();
+    expect(result.dropped).toHaveLength(0);
+    expect(result.shrunk).toHaveLength(0);
+    expect(result.sections.history).toEqual(['B'.repeat(60)]);
+    expect(result.usage.used).toBe(25);
+    expect(result.usage.utilization).toBe(1);
+  });
+
+  it('treats an empty section as free: present in sections, 0 in sectionUsage', () => {
+    // Pins empty-section behavior: zero-token content must not be dropped or
+    // count against the budget.
+    const budget = new TokenBudget({ limit: 10, countTokens: estimateTokens });
+    budget.reserve('empty', '', { priority: 'low' });
+    budget.reserve('system', 'A'.repeat(40), { priority: 'fixed' }); // exactly 10 tokens
+
+    const result = budget.compile();
+    expect(result.sections.empty).toEqual(['']);
+    expect(result.sectionUsage.empty).toBe(0);
+    expect(result.dropped).toHaveLength(0);
+  });
+
+  it('shrinks a single oversized item to an empty section with tail strategy (not dropped)', () => {
+    // Pins the degenerate tail case: one item that alone exceeds the budget
+    // shrinks to [], is reported as shrunk rather than dropped.
+    const budget = new TokenBudget({ limit: 5, countTokens: estimateTokens });
+    budget.reserveItems('history', [{ content: 'A'.repeat(400) }], { priority: 'high', strategy: 'tail' });
+
+    const result = budget.compile();
+    expect(result.shrunk).toContain('history');
+    expect(result.dropped).not.toContain('history');
+    expect(result.sections.history).toEqual([]);
+    expect(result.sectionUsage.history).toBe(0);
+    expect(result.usage.used).toBe(0);
+  });
+});

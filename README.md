@@ -3,7 +3,7 @@
 Context management for LLM applications.
 
 <p>
-  <img src="https://img.shields.io/badge/version-1.0.0-7dcfff?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.1-7dcfff?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/typescript-strict-bb9af7?style=flat-square" alt="typescript">
   <img src="https://img.shields.io/badge/tests-bun-9ece6a?style=flat-square" alt="tests">
   <img src="https://img.shields.io/badge/license-MIT-e0af68?style=flat-square" alt="license">
@@ -193,9 +193,10 @@ const turn = ctx.beginTurn();
 turn.set(currentProduct, myProduct);
 turn.set(topic, 'troubleshooting');
 
-// Read-your-writes: transaction sees staged values
+// Read-your-writes: both handles see staged values within the turn
 turn.get(currentProduct);  // → { id: 'mx-500', ... }
-ctx.get(currentProduct);   // → null (not committed yet)
+ctx.get(currentProduct);   // → { id: 'mx-500', ... } (staged; visible until commit/rollback)
+ctx.peek(currentProduct);  // → previous committed value (bypasses the transaction)
 
 try {
   const response = await llm.generate(prompt);
@@ -324,7 +325,7 @@ const snapshot = ctx.snapshot();
 
 // Restore
 const ctx2 = new ContextManager();
-ctx2.defineSlot<Product | null>('currentProduct', { defaultValue: null });
+ctx2.defineSlot<Product | null>('currentProduct');
 ctx2.restore(snapshot);
 ```
 
@@ -338,7 +339,6 @@ interface TrackedEntity {
 }
 
 const entities = ctx.defineSlot<Map<string, TrackedEntity>>('entities', {
-  defaultValue: new Map(),
   serialize: (m) => Array.from(m.entries()),
   deserialize: (raw) => new Map(raw as [string, TrackedEntity][]),
 });
@@ -360,22 +360,19 @@ const ctx = new ContextManager({ logger: console });
 
 // Slots — each agent reads/writes what it needs
 const intent = ctx.defineSlot<string | null>('intent', {
-  defaultValue: null,
   persistence: 'transient',
 });
 const confidence = ctx.defineSlot<number | null>('confidence', {
-  defaultValue: null,
   persistence: 'transient',
 });
 const currentProduct = ctx.defineSlot<string | null>('currentProduct', {
-  defaultValue: null,
   persistence: 'static',    // always in prompt
   owner: 'router',          // only the router can write this
 });
 const retryCount = ctx.defineSlot<number>('retryCount', {
-  defaultValue: 0,
   persistence: 'internal',  // never in prompt — system bookkeeping only
 });
+ctx.set(retryCount, 0);     // seed explicitly — slots have no default values
 
 // ── 2. Lenses: each agent sees a different slice ───────────────────
 
