@@ -42,9 +42,28 @@ export interface ReserveOptions {
   droppable?: boolean;
   /** Minimum tokens to keep even when shrinking (default: 0) */
   minTokens?: number;
+  /**
+   * Overflow policy for `strategy: 'rank'` (ignored otherwise). Scores are
+   * opaque to Mosaic — this only decides what happens at the first item that
+   * does not fit after sorting:
+   * - `'prefix'` (default): stop packing — the result is a prefix of the
+   *   score-sorted list (the historical behavior).
+   * - `'best-fit'`: skip the item that does not fit and keep packing smaller
+   *   items — fills the budget better, but the result is not a prefix.
+   */
+  onOverflow?: 'prefix' | 'best-fit';
+  /**
+   * Rerank hook for `strategy: 'rank'` (ignored otherwise) — the integration
+   * point for reranker knowledge (cross-encoder scores, intent boosts, ...).
+   * Called once, synchronously, and only when the section actually has to
+   * shrink — never when everything fits, so the cost is paid only under budget
+   * pressure. The returned array is what gets score-sorted (stable) and packed;
+   * the hook may reorder items and/or update their scores.
+   */
+  rerank?: (items: ScoredItem[]) => ScoredItem[];
 }
 
-/** A content item with an optional score (for rank strategy) */
+/** A content item with an optional score (for rank strategy). The score is opaque to Mosaic — only its ordering matters. */
 export interface ScoredItem {
   content: string;
   score?: number;
@@ -59,6 +78,8 @@ interface BudgetSection {
   strategy: ShrinkStrategy;
   droppable: boolean;
   minTokens: number;
+  onOverflow: 'prefix' | 'best-fit';
+  rerank?: (items: ScoredItem[]) => ScoredItem[];
 }
 
 /** Result of compiling the budget */
@@ -139,6 +160,8 @@ export class TokenBudget {
       strategy: options?.strategy ?? 'none',
       droppable: options?.droppable ?? priority === 'low',
       minTokens: options?.minTokens ?? 0,
+      onOverflow: options?.onOverflow ?? 'prefix',
+      rerank: options?.rerank,
     });
   }
 
@@ -252,8 +275,12 @@ export class TokenBudget {
     switch (section.strategy) {
       case 'tail':
         return this.shrinkTail(items, targetTokens);
-      case 'rank':
-        return this.shrinkRank(items, targetTokens);
+      case 'rank': {
+        // The rerank hook runs only on this path — i.e., only when the section
+        // actually has to shrink — so its cost is never paid when everything fits.
+        const pool = section.rerank ? section.rerank(items) : items;
+        return this.shrinkRank(pool, targetTokens, section.onOverflow);
+      }
       case 'truncate':
         return this.shrinkTruncate(items, targetTokens);
       default:
@@ -279,8 +306,10 @@ export class TokenBudget {
 
   /** Keep the highest-scored items that fit (for RAG chunks).
    *  Sort is STABLE on ties — insertion order wins — so callers can compose
-   *  deterministic ranking by applying small score boosts in a pre-pass. */
-  private shrinkRank(items: ScoredItem[], targetTokens: number): ScoredItem[] {
+   *  deterministic ranking by applying small score boosts in a pre-pass.
+   *  `onOverflow: 'prefix'` stops at the first item that does not fit;
+   *  `'best-fit'` skips it and keeps packing smaller items. */
+  private shrinkRank(items: ScoredItem[], targetTokens: number, onOverflow: 'prefix' | 'best-fit'): ScoredItem[] {
     // Sort by score descending, tie-break by original insertion index
     const sorted = [...items]
       .map((item, idx) => ({ item, idx }))
@@ -295,7 +324,10 @@ export class TokenBudget {
 
     for (const item of sorted) {
       const tokens = this.countTokens(item.content);
-      if (total + tokens > targetTokens) break;
+      if (total + tokens > targetTokens) {
+        if (onOverflow === 'best-fit') continue;
+        break;
+      }
       result.push(item);
       total += tokens;
     }
@@ -303,15 +335,32 @@ export class TokenBudget {
     return result;
   }
 
-  /** Hard truncate the content string (for single large texts) */
+  /** Hard truncate the joined content to fit targetTokens, measured with the
+   *  budget's own token counter: content that already fits is returned whole;
+   *  otherwise the longest prefix whose token count (including the '...'
+   *  suffix) fits is found by binary search. */
   private shrinkTruncate(items: ScoredItem[], targetTokens: number): ScoredItem[] {
     if (items.length === 0) return [];
 
-    // Estimate characters from target tokens (reverse of countTokens)
-    const targetChars = targetTokens * 4;
+    const ELLIPSIS = '...';
     const combined = items.map((i) => i.content).join('\n');
-    const truncated = combined.length > targetChars ? `${combined.substring(0, targetChars)}...` : combined;
 
-    return [{ content: truncated }];
+    if (this.countTokens(combined) <= targetTokens) return [{ content: combined }];
+
+    // Even the ellipsis does not fit — emit nothing rather than exceed the target.
+    if (this.countTokens(ELLIPSIS) > targetTokens) return [{ content: '' }];
+
+    // Binary search the longest prefix that fits with the ellipsis appended.
+    // Invariant: lo fits, hi does not. (Assumes the counter is non-decreasing
+    // over prefixes — true of any real tokenizer.)
+    let lo = 0;
+    let hi = combined.length;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (this.countTokens(combined.substring(0, mid) + ELLIPSIS) <= targetTokens) lo = mid;
+      else hi = mid;
+    }
+
+    return [{ content: `${combined.substring(0, lo)}${ELLIPSIS}` }];
   }
 }

@@ -895,6 +895,50 @@ describe('Knowledge', () => {
   });
 });
 
+// ── Query helper clamps ───────────────────────────────────────────
+//
+// Pins O7: count/limit arguments are normalized defensively instead of leaking
+// slice() footguns (recent(0) used to return the FULL history via slice(-0)).
+
+describe('Query helper clamps', () => {
+  it('recent(0), recent(negative), recent(NaN) return [] and non-integers floor', () => {
+    const ctx = new ContextManager();
+    ctx.addMessage('user', 'a');
+    ctx.addMessage('assistant', 'b');
+    ctx.addMessage('user', 'c');
+
+    expect(ctx.recent(0)).toEqual([]); // was: full history via slice(-0)
+    expect(ctx.recent(-1)).toEqual([]);
+    expect(ctx.recent(NaN)).toEqual([]);
+    expect(ctx.recent(2.7).map((m) => m.content)).toEqual(['b', 'c']);
+  });
+
+  it('recentPairs normalizes count the same way', () => {
+    const ctx = new ContextManager();
+    ctx.addMessage('user', 'q1');
+    ctx.addMessage('assistant', 'a1');
+    ctx.addMessage('user', 'q2');
+    ctx.addMessage('assistant', 'a2');
+
+    expect(ctx.recentPairs(0)).toEqual([]);
+    expect(ctx.recentPairs(-1)).toEqual([]);
+    expect(ctx.recentPairs(1.9)).toHaveLength(1);
+  });
+
+  it('search: limit 0 or negative returns [], undefined stays unbounded', () => {
+    const ctx = new ContextManager();
+    ctx.addMessage('user', 'test one');
+    ctx.addMessage('user', 'test two');
+    ctx.addMessage('user', 'test three');
+
+    expect(ctx.search('test', { limit: 0 })).toEqual([]); // was: falsy → unbounded
+    expect(ctx.search('test', { limit: -2 })).toEqual([]);
+    expect(ctx.search('test')).toHaveLength(3);
+    expect(ctx.search('test', {})).toHaveLength(3);
+    expect(ctx.search('test', { limit: 2 })).toHaveLength(2);
+  });
+});
+
 // ── Typed-state integration invariants ─────────────────────────────
 //
 // Each test names the regression it pins. These are the transaction/cache/ownership/restore

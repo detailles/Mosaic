@@ -3,7 +3,7 @@
 Context management for LLM applications.
 
 <p>
-  <img src="https://img.shields.io/badge/version-1.0.2-7dcfff?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.0-7dcfff?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/typescript-strict-bb9af7?style=flat-square" alt="typescript">
   <img src="https://img.shields.io/badge/tests-bun-9ece6a?style=flat-square" alt="tests">
   <img src="https://img.shields.io/badge/license-MIT-e0af68?style=flat-square" alt="license">
@@ -229,7 +229,7 @@ result.dropped;     // what was cut
 result.usage;       // { used, limit, utilization }
 ```
 
-Strategies: `tail` (keep recent), `rank` (keep highest-scored, **stable** on score ties), `truncate` (hard cut).
+Strategies: `tail` (keep recent), `rank` (keep highest-scored, **stable** on score ties), `truncate` (hard cut). Section names are unique — reserving the same name twice throws.
 
 > **Stable rank.** `shrinkRank` is a stable sort: items with equal scores
 > preserve their insertion order. This lets callers compose deterministic
@@ -237,6 +237,22 @@ Strategies: `tail` (keep recent), `rank` (keep highest-scored, **stable** on sco
 > `+0.1` to chunks matching the current query intent, feed them to the
 > budget, and the intent-relevant items win near-ties without overpowering
 > clearly-better chunks.
+
+Two optional knobs for `strategy: 'rank'`:
+
+```typescript
+budget.reserveItems('knowledge', chunks, {
+  priority: 'medium',
+  strategy: 'rank',
+  onOverflow: 'best-fit',  // default 'prefix': stop at the first item that doesn't fit.
+                           // 'best-fit': skip it and keep packing smaller items.
+  rerank: (items) => applyCrossEncoderScores(items),  // sync hook, called once —
+                           // and only when the section must actually shrink.
+                           // Reorder and/or rescore; the result is stable-sorted and packed.
+});
+```
+
+Scores are opaque to Mosaic — reranker knowledge enters only through `score` and `rerank`. The `truncate` strategy measures cuts with your `countTokens` (binary search, `...` cost included), not a char estimate; content that already fits is left whole.
 
 ### Filtering Knowledge with Predicates
 
@@ -284,6 +300,8 @@ ctx.depth();                           // count of user messages
 ctx.search('error', { role: 'user' }); // keyword search
 ctx.getByTag('type', 'clarification'); // find by tag
 ```
+
+Counts and limits are clamped defensively: `recent(0)` or a negative/NaN count returns `[]` (never the full history), non-integers floor, and `search`'s `limit: 0` returns no matches while an omitted limit stays unbounded.
 
 ### Renderers
 

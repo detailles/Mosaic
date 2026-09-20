@@ -111,10 +111,14 @@ export class ContextManager {
   /**
    * The `count` most recent messages, oldest first. `options.filter` is applied
    * after slicing, so it can only shrink the result below `count`.
+   * `count` is normalized defensively: `0`, negative or `NaN` returns `[]`
+   * (never the full history), non-integers are floored.
    */
   recent(count: number, options?: RecentOptions): CtxMessage[] {
+    const n = clampCount(count);
+    if (n === 0) return [];
     const msgs = this.getMessages();
-    const slice = msgs.slice(-count);
+    const slice = msgs.slice(-n);
     if (!options?.filter) return [...slice];
     return [...slice].filter(options.filter);
   }
@@ -122,12 +126,15 @@ export class ContextManager {
   /**
    * The `count` most recent adjacent user→assistant exchanges, oldest first.
    * Messages without an adjacent counterpart (system lines, orphans) are skipped.
+   * `count` is normalized like `recent()`: `0`, negative or `NaN` returns `[]`,
+   * non-integers are floored.
    */
   recentPairs(count: number): MessagePair[] {
+    const n = clampCount(count);
     const msgs = this.getMessages();
     const pairs: MessagePair[] = [];
 
-    for (let i = msgs.length - 1; i >= 1 && pairs.length < count; i--) {
+    for (let i = msgs.length - 1; i >= 1 && pairs.length < n; i--) {
       if (msgs[i].role === 'assistant' && msgs[i - 1].role === 'user') {
         pairs.unshift({
           user: msgs[i - 1],
@@ -151,10 +158,13 @@ export class ContextManager {
 
   /**
    * Case-insensitive substring search over message content, most recent match first.
-   * `options.role` restricts by role; `options.limit` caps the number of matches
-   * (a falsy limit means unbounded).
+   * `options.role` restricts by role; `options.limit` caps the number of matches —
+   * `undefined` means unbounded, while `0`, negative or `NaN` returns no matches.
    */
   search(query: string, options?: { limit?: number; role?: MessageRole }): CtxMessage[] {
+    const limit = options?.limit === undefined ? undefined : clampCount(options.limit);
+    if (limit === 0) return [];
+
     const lowerQuery = query.toLowerCase();
     const results: CtxMessage[] = [];
     const msgs = this.getMessages();
@@ -164,7 +174,7 @@ export class ContextManager {
       if (options?.role && msg.role !== options.role) continue;
       if (msg.content.toLowerCase().includes(lowerQuery)) {
         results.push(msg);
-        if (options?.limit && results.length >= options.limit) break;
+        if (limit !== undefined && results.length >= limit) break;
       }
     }
 
@@ -906,6 +916,12 @@ function isolate<T>(value: T): T {
     return Object.freeze(copy) as T;
   }
   return value;
+}
+
+/** Normalize a count/limit argument: NaN and non-positive values clamp to 0, non-integers floor. */
+function clampCount(value: number): number {
+  if (Number.isNaN(value) || value <= 0) return 0;
+  return Math.floor(value);
 }
 
 /** Shallow equality check for slot values — handles primitives, arrays, and simple objects */
