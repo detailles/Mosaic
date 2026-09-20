@@ -1,0 +1,137 @@
+<svg viewBox="0 0 720 440" width="720" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .ap-text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2D3748; }
+    .ap-white { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #FFFFFF; }
+    .ap-sub { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #718096; font-size: 9px; }
+    .ap-code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 9px; fill: #4A6FA5; }
+    .ap-slot { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 8px; fill: #3A8F85; }
+    .ap-lens { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 8px; fill: #6B8CAE; }
+    .ap-phase { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #718096; font-size: 10px; font-weight: 600; }
+    .ap-internal { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 8px; fill: #8896A4; }
+    .ap-arrow { stroke: #8896A4; stroke-width: 1.5; fill: none; }
+    .ap-arrow-head { fill: #8896A4; }
+    .ap-commit-arrow { stroke: #5A9E6F; stroke-width: 1.5; fill: none; }
+    .ap-sep { stroke: #E2E8F0; stroke-width: 1; }
+    .ap-persist-static { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #3D5A80; font-size: 8px; font-weight: 600; }
+    .ap-persist-transient { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #5B8DBD; font-size: 8px; }
+    .ap-persist-internal { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #8896A4; font-size: 8px; font-style: italic; }
+    @media (prefers-color-scheme: dark) {
+      .ap-text { fill: #E2E8F0; }
+      .ap-sub { fill: #A0AEC0; }
+      .ap-code { fill: #8AB4D6; }
+      .ap-slot { fill: #5BBFB3; }
+      .ap-lens { fill: #8AB4D6; }
+      .ap-phase { fill: #A0AEC0; }
+      .ap-internal { fill: #718096; }
+      .ap-arrow { stroke: #718096; }
+      .ap-arrow-head { fill: #718096; }
+      .ap-sep { stroke: #4A5568; }
+      .ap-persist-static { fill: #8AB4D6; }
+      .ap-persist-transient { fill: #B8D4E8; }
+      .ap-persist-internal { fill: #718096; }
+    }
+  </style>
+  <!-- Title -->
+  <text x="360" y="22" text-anchor="middle" font-size="13" font-weight="700" class="ap-text">Multi-Agent Pipeline with Shared Context</text>
+  <!-- ContextManager (center bar) -->
+  <rect x="20" y="35" width="680" height="50" rx="6" fill="#4A6FA5" fill-opacity="0.08" stroke="#4A6FA5" stroke-width="1.5"/>
+  <text x="360" y="55" text-anchor="middle" font-size="12" font-weight="700" class="ap-code">ContextManager</text>
+  <text x="80" y="74" text-anchor="middle" class="ap-slot">messages[]</text>
+  <text x="220" y="74" text-anchor="middle" class="ap-slot">slots{}</text>
+  <text x="360" y="74" text-anchor="middle" class="ap-slot">knowledge[]</text>
+  <text x="510" y="74" text-anchor="middle" class="ap-slot">transaction</text>
+  <text x="640" y="74" text-anchor="middle" class="ap-slot">turnCount</text>
+  <!-- Phase 1: beginTurn -->
+  <text x="20" y="108" class="ap-phase">1. Begin Turn</text>
+  <rect x="20" y="115" width="160" height="40" rx="6" fill="#4A6FA5" fill-opacity="0.1" stroke="#4A6FA5" stroke-width="1"/>
+  <text x="100" y="133" text-anchor="middle" font-size="10" class="ap-code">ctx.beginTurn()</text>
+  <text x="100" y="147" text-anchor="middle" class="ap-sub">Opens transaction</text>
+  <!-- Arrow to Router -->
+  <line x1="180" y1="135" x2="210" y2="135" class="ap-arrow"/>
+  <polygon points="208,130 218,135 208,140" class="ap-arrow-head"/>
+  <!-- Phase 2: Router -->
+  <text x="220" y="108" class="ap-phase">2. Route</text>
+  <rect x="220" y="115" width="150" height="70" rx="6" fill="#D4A843" fill-opacity="0.12" stroke="#D4A843" stroke-width="1.5"/>
+  <text x="295" y="133" text-anchor="middle" font-size="11" font-weight="600" class="ap-text">Router</text>
+  <text x="295" y="148" text-anchor="middle" class="ap-lens">through(routerLens)</text>
+  <text x="295" y="160" text-anchor="middle" class="ap-sub">1 msg, 200ch, 2 slots</text>
+  <text x="295" y="175" text-anchor="middle" class="ap-slot">writes: intent, confidence</text>
+  <!-- Arrow to Retriever -->
+  <line x1="370" y1="150" x2="400" y2="150" class="ap-arrow"/>
+  <polygon points="398,145 408,150 398,155" class="ap-arrow-head"/>
+  <!-- Phase 3: Retriever -->
+  <text x="410" y="108" class="ap-phase">3. Retrieve</text>
+  <rect x="410" y="115" width="150" height="70" rx="6" fill="#7B5EA7" fill-opacity="0.12" stroke="#7B5EA7" stroke-width="1.5"/>
+  <text x="485" y="133" text-anchor="middle" font-size="11" font-weight="600" class="ap-text">Retriever</text>
+  <text x="485" y="148" text-anchor="middle" class="ap-lens">through(knowledgeLens)</text>
+  <text x="485" y="160" text-anchor="middle" class="ap-sub">5 msgs, 3 slots</text>
+  <text x="485" y="175" text-anchor="middle" class="ap-slot">writes: addKnowledge()</text>
+  <!-- Arrow to Synthesizer -->
+  <line x1="560" y1="150" x2="590" y2="150" class="ap-arrow"/>
+  <polygon points="588,145 598,150 588,155" class="ap-arrow-head"/>
+  <!-- Phase 4: Synthesizer -->
+  <text x="600" y="108" class="ap-phase">4. Synthesize</text>
+  <rect x="600" y="115" width="100" height="70" rx="6" fill="#3A8F85" fill-opacity="0.12" stroke="#3A8F85" stroke-width="1.5"/>
+  <text x="650" y="133" text-anchor="middle" font-size="11" font-weight="600" class="ap-text">Synth</text>
+  <text x="650" y="148" text-anchor="middle" class="ap-lens">through(synthLens)</text>
+  <text x="650" y="160" text-anchor="middle" class="ap-sub">6 msgs, all slots</text>
+  <text x="650" y="175" text-anchor="middle" class="ap-sub">+ knowledge</text>
+  <!-- Separator -->
+  <line x1="20" y1="200" x2="700" y2="200" class="ap-sep"/>
+  <!-- Slot state evolution -->
+  <text x="20" y="220" class="ap-phase">Slot State Through Pipeline</text>
+  <!-- Timeline headers -->
+  <text x="120" y="240" text-anchor="middle" font-size="10" font-weight="600" class="ap-text">beginTurn()</text>
+  <text x="295" y="240" text-anchor="middle" font-size="10" font-weight="600" class="ap-text">Router writes</text>
+  <text x="485" y="240" text-anchor="middle" font-size="10" font-weight="600" class="ap-text">Retriever writes</text>
+  <text x="650" y="240" text-anchor="middle" font-size="10" font-weight="600" class="ap-text">commit()</text>
+  <!-- Slot: intent (transient) -->
+  <text x="20" y="262" font-size="10" class="ap-slot">intent</text>
+  <text x="66" y="262" class="ap-persist-transient">transient</text>
+  <rect x="110" y="250" width="50" height="18" rx="3" fill="#E2E8F0" opacity="0.5"/><text x="135" y="263" text-anchor="middle" font-size="9" class="ap-sub">null</text>
+  <rect x="265" y="250" width="60" height="18" rx="3" fill="#D4A843" opacity="0.3"/><text x="295" y="263" text-anchor="middle" font-size="9" class="ap-text">"question"</text>
+  <rect x="455" y="250" width="60" height="18" rx="3" fill="#D4A843" opacity="0.3"/><text x="485" y="263" text-anchor="middle" font-size="9" class="ap-text">"question"</text>
+  <rect x="620" y="250" width="60" height="18" rx="3" fill="#5A9E6F" opacity="0.3"/><text x="650" y="263" text-anchor="middle" font-size="9" class="ap-text">"question"</text>
+  <!-- Slot: confidence (transient) -->
+  <text x="20" y="287" font-size="10" class="ap-slot">confidence</text>
+  <text x="77" y="287" class="ap-persist-transient">transient</text>
+  <rect x="110" y="275" width="50" height="18" rx="3" fill="#E2E8F0" opacity="0.5"/><text x="135" y="288" text-anchor="middle" font-size="9" class="ap-sub">null</text>
+  <rect x="270" y="275" width="50" height="18" rx="3" fill="#D4A843" opacity="0.3"/><text x="295" y="288" text-anchor="middle" font-size="9" class="ap-text">0.92</text>
+  <rect x="460" y="275" width="50" height="18" rx="3" fill="#D4A843" opacity="0.3"/><text x="485" y="288" text-anchor="middle" font-size="9" class="ap-text">0.92</text>
+  <rect x="625" y="275" width="50" height="18" rx="3" fill="#5A9E6F" opacity="0.3"/><text x="650" y="288" text-anchor="middle" font-size="9" class="ap-text">0.92</text>
+  <!-- Slot: knowledge (turn-scoped) -->
+  <text x="20" y="312" font-size="10" class="ap-slot">knowledge</text>
+  <text x="76" y="312" class="ap-persist-static">static</text>
+  <rect x="110" y="300" width="50" height="18" rx="3" fill="#E2E8F0" opacity="0.5"/><text x="135" y="313" text-anchor="middle" font-size="9" class="ap-sub">[]</text>
+  <rect x="275" y="300" width="40" height="18" rx="3" fill="#E2E8F0" opacity="0.5"/><text x="295" y="313" text-anchor="middle" font-size="9" class="ap-sub">[]</text>
+  <rect x="455" y="300" width="60" height="18" rx="3" fill="#7B5EA7" opacity="0.3"/><text x="485" y="313" text-anchor="middle" font-size="9" class="ap-text">5 chunks</text>
+  <rect x="620" y="300" width="60" height="18" rx="3" fill="#5A9E6F" opacity="0.3"/><text x="650" y="313" text-anchor="middle" font-size="9" class="ap-text">5 chunks</text>
+  <!-- Slot: retryCount (internal — never in prompt) -->
+  <text x="20" y="337" font-size="10" class="ap-internal">retryCount</text>
+  <text x="76" y="337" class="ap-persist-internal">internal</text>
+  <rect x="110" y="325" width="50" height="18" rx="3" fill="none" stroke="#8896A4" stroke-width="1" stroke-dasharray="3,2"/><text x="135" y="338" text-anchor="middle" font-size="9" class="ap-internal">0</text>
+  <rect x="275" y="325" width="40" height="18" rx="3" fill="none" stroke="#8896A4" stroke-width="1" stroke-dasharray="3,2"/><text x="295" y="338" text-anchor="middle" font-size="9" class="ap-internal">0</text>
+  <rect x="460" y="325" width="50" height="18" rx="3" fill="none" stroke="#8896A4" stroke-width="1" stroke-dasharray="3,2"/><text x="485" y="338" text-anchor="middle" font-size="9" class="ap-internal">0</text>
+  <rect x="625" y="325" width="50" height="18" rx="3" fill="none" stroke="#8896A4" stroke-width="1" stroke-dasharray="3,2"/><text x="650" y="338" text-anchor="middle" font-size="9" class="ap-internal">0</text>
+  <text x="695" y="337" class="ap-persist-internal">never in prompt</text>
+  <!-- Timeline arrows -->
+  <line x1="160" y1="280" x2="265" y2="280" class="ap-arrow" stroke-dasharray="4,3"/>
+  <line x1="325" y1="280" x2="455" y2="280" class="ap-arrow" stroke-dasharray="4,3"/>
+  <line x1="515" y1="280" x2="620" y2="280" class="ap-commit-arrow" stroke-dasharray="4,3"/>
+  <!-- Separator -->
+  <line x1="20" y1="355" x2="700" y2="355" class="ap-sep"/>
+  <!-- Isolation callout -->
+  <text x="20" y="375" class="ap-phase">Key Insight: Isolation via Lenses</text>
+  <rect x="20" y="383" width="215" height="48" rx="4" fill="#D4A843" fill-opacity="0.08" stroke="#D4A843" stroke-width="1"/>
+  <text x="127" y="398" text-anchor="middle" font-size="9" font-weight="600" class="ap-text">Router sees 1 msg + 2 slots</text>
+  <text x="127" y="410" text-anchor="middle" class="ap-sub">Fast classification, minimal context</text>
+  <text x="127" y="422" text-anchor="middle" class="ap-persist-internal">internal slots invisible</text>
+  <rect x="252" y="383" width="215" height="48" rx="4" fill="#7B5EA7" fill-opacity="0.08" stroke="#7B5EA7" stroke-width="1"/>
+  <text x="360" y="398" text-anchor="middle" font-size="9" font-weight="600" class="ap-text">Retriever sees 5 msgs + 3 slots</text>
+  <text x="360" y="410" text-anchor="middle" class="ap-sub">Enough history for query rewriting</text>
+  <text x="360" y="422" text-anchor="middle" class="ap-persist-internal">internal slots invisible</text>
+  <rect x="484" y="383" width="215" height="48" rx="4" fill="#3A8F85" fill-opacity="0.08" stroke="#3A8F85" stroke-width="1"/>
+  <text x="592" y="398" text-anchor="middle" font-size="9" font-weight="600" class="ap-text">Synth sees 6 msgs + all + knowledge</text>
+  <text x="592" y="410" text-anchor="middle" class="ap-sub">Full context for response generation</text>
+  <text x="592" y="422" text-anchor="middle" class="ap-persist-internal">internal slots excluded from budget</text>
+</svg>

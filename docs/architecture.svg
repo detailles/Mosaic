@@ -1,0 +1,43 @@
+<svg viewBox="0 0 700 300" width="700" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .m-text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2D3748; }
+    .m-text-white { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #FFFFFF; }
+    .m-text-sub { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #718096; font-size: 10px; }
+    .m-lens { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #6B8CAE; }
+    .m-txn { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #C75C5C; }
+    .m-budget { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #5B8DBD; }
+    @media (prefers-color-scheme: dark) {
+      .m-text { fill: #E2E8F0; }
+      .m-text-sub { fill: #A0AEC0; }
+      .m-lens { fill: #8AB4D6; }
+      .m-txn { fill: #E87C7C; }
+      .m-budget { fill: #8AB4D6; }
+    }
+  </style>
+  <rect x="120" y="20" width="130" height="44" rx="6" fill="#D4A843" stroke="#B8922E" stroke-width="1.5"/>
+  <text x="185" y="47" text-anchor="middle" font-size="13" font-weight="600" class="m-text-white">Messages[]</text>
+  <text x="185" y="78" text-anchor="middle" class="m-text-sub">Conversation history</text>
+  <rect x="290" y="20" width="130" height="44" rx="6" fill="#3A8F85" stroke="#2D7A71" stroke-width="1.5"/>
+  <text x="355" y="47" text-anchor="middle" font-size="13" font-weight="600" class="m-text-white">Slots</text>
+  <text x="355" y="78" text-anchor="middle" class="m-text-sub">Typed state containers</text>
+  <rect x="460" y="20" width="130" height="44" rx="6" fill="#7B5EA7" stroke="#654B8E" stroke-width="1.5"/>
+  <text x="525" y="47" text-anchor="middle" font-size="13" font-weight="600" class="m-text-white">Knowledge</text>
+  <text x="525" y="78" text-anchor="middle" class="m-text-sub">RAG chunks</text>
+  <line x1="185" y1="64" x2="310" y2="120" stroke="#8896A4" stroke-width="1.5"/>
+  <line x1="355" y1="64" x2="355" y2="120" stroke="#8896A4" stroke-width="1.5"/>
+  <line x1="525" y1="64" x2="400" y2="120" stroke="#8896A4" stroke-width="1.5"/>
+  <rect x="260" y="120" width="190" height="56" rx="8" fill="#4A6FA5" stroke="#3A5A8A" stroke-width="2"/>
+  <text x="355" y="154" text-anchor="middle" font-size="14" font-weight="700" class="m-text-white">ContextManager</text>
+  <line x1="310" y1="176" x2="165" y2="220" stroke="#8896A4" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="355" y1="176" x2="355" y2="220" stroke="#8896A4" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="400" y1="176" x2="545" y2="220" stroke="#8896A4" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <rect x="90" y="220" width="150" height="44" rx="6" fill="none" stroke="#6B8CAE" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="165" y="247" text-anchor="middle" font-size="13" font-weight="600" class="m-lens">Lenses</text>
+  <text x="165" y="278" text-anchor="middle" class="m-text-sub">Scoped read-only views</text>
+  <rect x="280" y="220" width="150" height="44" rx="6" fill="none" stroke="#C75C5C" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="355" y="247" text-anchor="middle" font-size="13" font-weight="600" class="m-txn">Transactions</text>
+  <text x="355" y="278" text-anchor="middle" class="m-text-sub">Atomic slot commits</text>
+  <rect x="470" y="220" width="150" height="44" rx="6" fill="none" stroke="#5B8DBD" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="545" y="247" text-anchor="middle" font-size="13" font-weight="600" class="m-budget">TokenBudget</text>
+  <text x="545" y="278" text-anchor="middle" class="m-text-sub">Priority-based allocation</text>
+</svg>

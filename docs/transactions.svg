@@ -1,0 +1,59 @@
+<svg viewBox="0 0 720 260" width="720" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .tx-text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2D3748; }
+    .tx-sub { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #718096; font-size: 10px; }
+    .tx-code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 10px; fill: #3A8F85; }
+    .tx-muted { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #718096; font-size: 9px; }
+    .tx-accent { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #4A6FA5; }
+    .tx-commit { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #5A9E6F; }
+    .tx-rollback { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #C75C5C; }
+    .tx-idle-bg { fill: #E2E8F0; }
+    .tx-staged-bg { fill: #FFFFFF; }
+    @keyframes txOpen { 0%,5% { opacity: 0.2 } 10%,90% { opacity: 1 } 95%,100% { opacity: 0.2 } }
+    @keyframes txStage1 { 0%,14% { opacity: 0 } 18%,90% { opacity: 1 } 95%,100% { opacity: 0 } }
+    @keyframes txStage2 { 0%,22% { opacity: 0 } 26%,90% { opacity: 1 } 95%,100% { opacity: 0 } }
+    @keyframes txReadWrites { 0%,28% { opacity: 0 } 32%,90% { opacity: 1 } 95%,100% { opacity: 0 } }
+    @keyframes txCommit { 0%,50% { opacity: 0 } 55%,85% { opacity: 1 } 90%,100% { opacity: 0 } }
+    @keyframes txRollback { 0%,50% { opacity: 0 } 55%,85% { opacity: 1 } 90%,100% { opacity: 0 } }
+    @keyframes txArrow1 { 0%,5% { stroke-dashoffset: 60 } 10%,100% { stroke-dashoffset: 0 } }
+    @keyframes txArrow2c { 0%,48% { stroke-dashoffset: 80 } 55%,100% { stroke-dashoffset: 0 } }
+    @keyframes txArrow2r { 0%,48% { stroke-dashoffset: 80 } 55%,100% { stroke-dashoffset: 0 } }
+    @media (prefers-color-scheme: dark) {
+      .tx-text { fill: #E2E8F0; }
+      .tx-sub { fill: #A0AEC0; }
+      .tx-code { fill: #5BBFB3; }
+      .tx-muted { fill: #A0AEC0; }
+      .tx-accent { fill: #8AB4D6; }
+      .tx-commit { fill: #7BC88E; }
+      .tx-rollback { fill: #E87C7C; }
+      .tx-idle-bg { fill: #4A5568; }
+      .tx-staged-bg { fill: #2D3748; }
+    }
+  </style>
+  <rect x="20" y="90" width="100" height="50" rx="25" class="tx-idle-bg" stroke="#8896A4" stroke-width="1.5"/>
+  <text x="70" y="120" text-anchor="middle" font-size="13" font-weight="600" class="tx-text">Idle</text>
+  <line x1="120" y1="115" x2="192" y2="115" stroke="#4A6FA5" stroke-width="2" stroke-dasharray="60" style="animation: txArrow1 8s infinite"/>
+  <polygon points="190,108 202,115 190,122" fill="#4A6FA5" style="animation: txOpen 8s infinite"/>
+  <text x="156" y="106" text-anchor="middle" font-size="10" font-weight="600" class="tx-accent">beginTurn()</text>
+  <rect x="204" y="50" width="230" height="160" rx="8" fill="#4A6FA5" fill-opacity="0.06" stroke="#4A6FA5" stroke-width="2" style="animation: txOpen 8s infinite"/>
+  <text x="319" y="72" text-anchor="middle" font-size="13" font-weight="700" class="tx-accent" style="animation: txOpen 8s infinite">Open</text>
+  <rect x="218" y="82" width="202" height="64" rx="4" class="tx-staged-bg" stroke="#8896A4" stroke-width="1" style="animation: txStage1 8s infinite"/>
+  <text x="228" y="96" font-size="9" font-weight="600" class="tx-sub" style="animation: txStage1 8s infinite">STAGED</text>
+  <text x="228" y="112" class="tx-code" style="animation: txStage1 8s infinite">product: null → MX-500</text>
+  <text x="228" y="128" class="tx-code" style="animation: txStage2 8s infinite">topic: null → "troubleshoot"</text>
+  <text x="218" y="164" class="tx-muted" style="animation: txReadWrites 8s infinite">turn.get() sees staged values</text>
+  <text x="218" y="178" class="tx-muted" style="animation: txReadWrites 8s infinite">ctx.get() still sees old values</text>
+  <text x="218" y="196" font-size="9" font-weight="600" class="tx-accent" style="animation: txReadWrites 8s infinite">Read-your-writes semantics</text>
+  <path d="M 434 100 C 470 100 470 60 510 60" fill="none" stroke="#5A9E6F" stroke-width="2" stroke-dasharray="80" style="animation: txArrow2c 8s infinite"/>
+  <polygon points="508,53 520,60 508,67" fill="#5A9E6F" style="animation: txCommit 8s infinite"/>
+  <text x="480" y="48" text-anchor="middle" font-size="10" font-weight="600" class="tx-commit" style="animation: txCommit 8s infinite">commit()</text>
+  <rect x="522" y="36" width="170" height="50" rx="25" fill="#5A9E6F" fill-opacity="0.12" stroke="#5A9E6F" stroke-width="1.5" style="animation: txCommit 8s infinite"/>
+  <text x="607" y="57" text-anchor="middle" font-size="12" font-weight="600" class="tx-commit" style="animation: txCommit 8s infinite">Committed</text>
+  <text x="607" y="73" text-anchor="middle" font-size="9" class="tx-commit" style="animation: txCommit 8s infinite">All changes applied</text>
+  <path d="M 434 160 C 470 160 470 195 510 195" fill="none" stroke="#C75C5C" stroke-width="2" stroke-dasharray="80" style="animation: txArrow2r 8s infinite"/>
+  <polygon points="508,188 520,195 508,202" fill="#C75C5C" style="animation: txRollback 8s infinite"/>
+  <text x="480" y="185" text-anchor="middle" font-size="10" font-weight="600" class="tx-rollback" style="animation: txRollback 8s infinite">rollback()</text>
+  <rect x="522" y="170" width="170" height="50" rx="25" fill="#C75C5C" fill-opacity="0.12" stroke="#C75C5C" stroke-width="1.5" style="animation: txRollback 8s infinite"/>
+  <text x="607" y="191" text-anchor="middle" font-size="12" font-weight="600" class="tx-rollback" style="animation: txRollback 8s infinite">Rolled Back</text>
+  <text x="607" y="207" text-anchor="middle" font-size="9" class="tx-rollback" style="animation: txRollback 8s infinite">All changes discarded</text>
+</svg>

@@ -1,0 +1,83 @@
+<svg viewBox="0 0 720 280" width="720" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .tb-text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2D3748; }
+    .tb-white { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #FFFFFF; font-size: 11px; font-weight: 600; }
+    .tb-sub { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #718096; font-size: 9px; }
+    .tb-code { font-family: 'SF Mono', 'Fira Code', Consolas, monospace; font-size: 9px; fill: #718096; }
+    .tb-accent { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #4A6FA5; }
+    .tb-danger { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #C75C5C; }
+    .tb-state-text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #3D5A80; }
+    .tb-internal { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #8896A4; font-size: 9px; }
+    @keyframes tbFill { 0%,5% { opacity: 0 } 8%,100% { opacity: 1 } }
+    @keyframes tbOverflow { 0%,15% { opacity: 0 } 20%,40% { opacity: 1 } 45%,100% { opacity: 0 } }
+    @keyframes tbResult { 0%,60% { opacity: 0 } 65%,92% { opacity: 1 } 96%,100% { opacity: 0 } }
+    @keyframes tbCompile { 0%,38% { opacity: 0 } 42%,58% { opacity: 1 } 62%,100% { opacity: 0 } }
+    @media (prefers-color-scheme: dark) {
+      .tb-text { fill: #E2E8F0; }
+      .tb-sub { fill: #A0AEC0; }
+      .tb-code { fill: #A0AEC0; }
+      .tb-accent { fill: #8AB4D6; }
+      .tb-danger { fill: #E87C7C; }
+      .tb-state-text { fill: #B8D4E8; }
+      .tb-internal { fill: #A0AEC0; }
+    }
+  </style>
+  <!-- Persistence sidebar -->
+  <text x="20" y="16" font-size="10" font-weight="700" class="tb-text">Slot Persistence → Budget Priority</text>
+  <rect x="20" y="24" width="90" height="20" rx="3" fill="#3D5A80" opacity="0.2"/>
+  <text x="65" y="38" text-anchor="middle" font-size="9" font-weight="600" class="tb-state-text">static</text>
+  <text x="120" y="38" class="tb-sub">always in prompt</text>
+  <rect x="240" y="24" width="90" height="20" rx="3" fill="#B8D4E8" opacity="0.3"/>
+  <text x="285" y="38" text-anchor="middle" font-size="9" font-weight="600" class="tb-state-text">transient</text>
+  <text x="340" y="38" class="tb-sub">droppable</text>
+  <rect x="430" y="24" width="90" height="20" rx="3" fill="#E2E8F0" opacity="0.3" stroke="#8896A4" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="475" y="38" text-anchor="middle" font-size="9" font-weight="600" class="tb-internal">internal</text>
+  <text x="530" y="38" class="tb-sub">never in prompt</text>
+  <!-- BEFORE -->
+  <text x="20" y="68" font-size="11" font-weight="700" class="tb-text">BEFORE compile()</text>
+  <text x="20" y="82" class="tb-sub">Total: 9,400 tokens -- over budget!</text>
+  <!-- Budget bar -->
+  <rect x="20" y="90" width="120" height="36" rx="4" fill="#3D5A80" style="animation: tbFill 10s infinite"/>
+  <text x="80" y="112" text-anchor="middle" class="tb-white" style="animation: tbFill 10s infinite">system</text>
+  <text x="80" y="136" text-anchor="middle" class="tb-sub">1,200 tk · fixed</text>
+  <rect x="142" y="90" width="150" height="36" rx="4" fill="#5B8DBD" style="animation: tbFill 10s infinite"/>
+  <text x="217" y="112" text-anchor="middle" class="tb-white" style="animation: tbFill 10s infinite">static slots</text>
+  <text x="217" y="136" text-anchor="middle" class="tb-sub">800 tk · high</text>
+  <rect x="294" y="90" width="150" height="36" rx="4" fill="#8AB4D6" style="animation: tbFill 10s infinite"/>
+  <text x="369" y="112" text-anchor="middle" class="tb-white" style="animation: tbFill 10s infinite">knowledge</text>
+  <text x="369" y="136" text-anchor="middle" class="tb-sub">3,200 tk · medium/rank</text>
+  <rect x="446" y="90" width="90" height="36" rx="4" fill="#B8D4E8" style="animation: tbFill 10s infinite"/>
+  <text x="491" y="112" text-anchor="middle" font-size="11" font-weight="600" class="tb-state-text" style="animation: tbFill 10s infinite">transient</text>
+  <text x="491" y="136" text-anchor="middle" class="tb-sub">1,200 tk · low</text>
+  <!-- Internal: excluded -->
+  <rect x="540" y="90" width="74" height="36" rx="4" fill="none" stroke="#8896A4" stroke-width="1" stroke-dasharray="3,2" style="animation: tbFill 10s infinite"/>
+  <text x="577" y="108" text-anchor="middle" class="tb-internal" style="animation: tbFill 10s infinite">internal</text>
+  <text x="577" y="120" text-anchor="middle" class="tb-internal" style="animation: tbFill 10s infinite">excluded</text>
+  <!-- Limit line -->
+  <line x1="536" y1="84" x2="536" y2="130" stroke="#C75C5C" stroke-width="2" stroke-dasharray="4,2"/>
+  <text x="538" y="84" font-size="9" font-weight="600" class="tb-danger">8,192 limit</text>
+  <!-- Overflow -->
+  <rect x="618" y="90" width="52" height="36" rx="4" fill="#C75C5C" fill-opacity="0.15" stroke="#C75C5C" stroke-width="1.5" stroke-dasharray="4,2" style="animation: tbOverflow 10s infinite"/>
+  <text x="644" y="112" text-anchor="middle" font-size="10" font-weight="700" class="tb-danger" style="animation: tbOverflow 10s infinite">+1,200</text>
+  <!-- compile() -->
+  <text x="360" y="168" text-anchor="middle" font-size="13" font-weight="700" class="tb-accent" style="animation: tbCompile 10s infinite">compile()</text>
+  <text x="360" y="182" text-anchor="middle" font-size="10" class="tb-accent" style="animation: tbCompile 10s infinite">Drop transient, shrink knowledge. Internal never enters budget.</text>
+  <!-- AFTER -->
+  <text x="20" y="204" font-size="11" font-weight="700" class="tb-text" style="animation: tbResult 10s infinite">AFTER compile()</text>
+  <rect x="20" y="212" width="120" height="36" rx="4" fill="#3D5A80" style="animation: tbResult 10s infinite"/>
+  <text x="80" y="234" text-anchor="middle" class="tb-white" style="animation: tbResult 10s infinite">system</text>
+  <rect x="142" y="212" width="150" height="36" rx="4" fill="#5B8DBD" style="animation: tbResult 10s infinite"/>
+  <text x="217" y="234" text-anchor="middle" class="tb-white" style="animation: tbResult 10s infinite">static slots</text>
+  <rect x="294" y="212" width="130" height="36" rx="4" fill="#8AB4D6" style="animation: tbResult 10s infinite"/>
+  <text x="359" y="234" text-anchor="middle" class="tb-white" style="animation: tbResult 10s infinite">knowledge (shrunk)</text>
+  <!-- Dropped transient -->
+  <rect x="428" y="212" width="70" height="36" rx="4" fill="#C75C5C" fill-opacity="0.1" stroke="#C75C5C" stroke-width="1" stroke-dasharray="4,2" style="animation: tbResult 10s infinite"/>
+  <line x1="442" y1="220" x2="484" y2="242" stroke="#C75C5C" stroke-width="2" style="animation: tbResult 10s infinite"/>
+  <line x1="484" y1="220" x2="442" y2="242" stroke="#C75C5C" stroke-width="2" style="animation: tbResult 10s infinite"/>
+  <text x="463" y="260" text-anchor="middle" font-size="9" font-weight="600" class="tb-danger" style="animation: tbResult 10s infinite">dropped</text>
+  <!-- Result annotation -->
+  <text x="520" y="222" class="tb-code" style="animation: tbResult 10s infinite">dropped: ["transient"]</text>
+  <text x="520" y="234" class="tb-code" style="animation: tbResult 10s infinite">shrunk: ["knowledge"]</text>
+  <text x="520" y="246" class="tb-code" style="animation: tbResult 10s infinite">excluded: ["internal"]</text>
+  <text x="520" y="258" class="tb-code" style="animation: tbResult 10s infinite">utilization: 0.97</text>
+</svg>

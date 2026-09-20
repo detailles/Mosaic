@@ -1,0 +1,63 @@
+<svg viewBox="0 0 720 340" width="720" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .ln-text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2D3748; }
+    .ln-dim { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #A0AEC0; font-size: 11px; }
+    .ln-sub { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #718096; font-size: 10px; }
+    .ln-msg { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #805B10; }
+    .ln-slot { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2D7A71; }
+    .ln-know { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #654B8E; }
+    .ln-msg-label { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #D4A843; }
+    .ln-slot-label { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #3A8F85; }
+    .ln-know-label { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #7B5EA7; }
+    .ln-lens { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #4A6FA5; }
+    @media (prefers-color-scheme: dark) {
+      .ln-text { fill: #E2E8F0; }
+      .ln-dim { fill: #8896A4; }
+      .ln-sub { fill: #A0AEC0; }
+      .ln-msg { fill: #E8C96A; }
+      .ln-slot { fill: #5BBFB3; }
+      .ln-know { fill: #A78BCA; }
+      .ln-msg-label { fill: #E8C96A; }
+      .ln-slot-label { fill: #5BBFB3; }
+      .ln-know-label { fill: #A78BCA; }
+      .ln-lens { fill: #8AB4D6; }
+    }
+  </style>
+  <text x="20" y="20" font-size="12" font-weight="700" class="ln-text">Full Context</text>
+  <rect x="20" y="30" width="250" height="160" rx="6" fill="none" stroke="#D4A843" stroke-width="1.5"/>
+  <text x="30" y="48" font-size="10" font-weight="600" class="ln-msg-label">MESSAGES</text>
+  <rect x="30" y="54" width="230" height="16" rx="3" fill="#D4A843" opacity="0.15"/><text x="38" y="65" class="ln-dim">msg[0] system</text>
+  <rect x="30" y="73" width="230" height="16" rx="3" fill="#D4A843" opacity="0.15"/><text x="38" y="84" class="ln-dim">msg[1] user</text>
+  <rect x="30" y="92" width="230" height="16" rx="3" fill="#D4A843" opacity="0.3"/><text x="38" y="103" font-size="11" class="ln-msg">msg[2] assistant</text>
+  <rect x="30" y="111" width="230" height="16" rx="3" fill="#D4A843" opacity="0.3"/><text x="38" y="122" font-size="11" class="ln-msg">msg[3] user</text>
+  <rect x="30" y="130" width="230" height="16" rx="3" fill="#D4A843" opacity="0.3"/><text x="38" y="141" font-size="11" class="ln-msg">msg[4] assistant</text>
+  <rect x="30" y="149" width="230" height="16" rx="3" fill="#D4A843" opacity="0.3"/><text x="38" y="160" font-size="11" class="ln-msg">msg[5] user</text>
+  <rect x="30" y="168" width="230" height="16" rx="3" fill="#D4A843" opacity="0.6"/><text x="38" y="179" font-size="11" font-weight="600" class="ln-msg">msg[6] user (latest)</text>
+  <rect x="20" y="198" width="250" height="62" rx="6" fill="none" stroke="#3A8F85" stroke-width="1.5"/>
+  <text x="30" y="216" font-size="10" font-weight="600" class="ln-slot-label">SLOTS</text>
+  <text x="38" y="232" font-size="11" class="ln-slot">currentProduct: MX-500</text>
+  <text x="38" y="248" font-size="11" class="ln-slot">topic: "troubleshooting"</text>
+  <rect x="20" y="268" width="250" height="50" rx="6" fill="none" stroke="#7B5EA7" stroke-width="1.5"/>
+  <text x="30" y="286" font-size="10" font-weight="600" class="ln-know-label">KNOWLEDGE</text>
+  <text x="38" y="302" font-size="11" class="ln-know">5 chunks (rag: 3, web: 2)</text>
+  <rect x="410" y="30" width="280" height="110" rx="8" fill="#6B8CAE" fill-opacity="0.08" stroke="#6B8CAE" stroke-width="2"/>
+  <text x="420" y="50" font-size="12" font-weight="700" class="ln-lens">routerLens</text>
+  <text x="420" y="64" class="ln-sub">messages: { last: 1, maxChars: 200 }</text>
+  <rect x="420" y="72" width="260" height="16" rx="3" fill="#D4A843" opacity="0.4"/><text x="428" y="83" font-size="11" class="ln-msg">msg[6] user (truncated 200ch)</text>
+  <rect x="420" y="94" width="120" height="16" rx="3" fill="#3A8F85" opacity="0.3"/><text x="428" y="105" font-size="11" class="ln-slot">currentProduct</text>
+  <rect x="546" y="94" width="130" height="16" rx="3" fill="#3A8F85" opacity="0.3"/><text x="554" y="105" font-size="11" class="ln-slot">lastResponseType</text>
+  <text x="420" y="130" class="ln-sub">slots: 2 of 3 declared</text>
+  <rect x="410" y="160" width="280" height="158" rx="8" fill="#6B8CAE" fill-opacity="0.08" stroke="#6B8CAE" stroke-width="2"/>
+  <text x="420" y="180" font-size="12" font-weight="700" class="ln-lens">synthesisLens</text>
+  <text x="420" y="194" class="ln-sub">messages: { last: 6, filter: fn }</text>
+  <rect x="420" y="202" width="260" height="16" rx="3" fill="#D4A843" opacity="0.25"/><text x="428" y="213" font-size="10" class="ln-msg">msg[1]..msg[6] (6 messages)</text>
+  <rect x="420" y="224" width="260" height="16" rx="3" fill="#3A8F85" opacity="0.25"/><text x="428" y="235" font-size="10" class="ln-slot">slots: * (all slots visible)</text>
+  <rect x="420" y="246" width="260" height="16" rx="3" fill="#7B5EA7" opacity="0.25"/><text x="428" y="257" font-size="10" class="ln-know">knowledge: 5 chunks (all sources)</text>
+  <text x="420" y="280" class="ln-sub">Full access -- for response generation</text>
+  <text x="420" y="306" class="ln-sub">Undeclared slot access logs warning</text>
+  <path d="M 260 176 C 330 176 340 82 410 82" fill="none" stroke="#D4A843" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+  <path d="M 270 224 C 330 224 340 102 410 102" fill="none" stroke="#3A8F85" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+  <path d="M 260 140 C 340 140 350 210 410 210" fill="none" stroke="#D4A843" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+  <path d="M 270 240 C 340 240 350 234 410 234" fill="none" stroke="#3A8F85" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+  <path d="M 270 293 C 340 293 350 254 410 254" fill="none" stroke="#7B5EA7" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+</svg>
