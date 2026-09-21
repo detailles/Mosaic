@@ -1,6 +1,6 @@
 {
   "name": "@detailles/mosaic",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Context management for LLM applications — typed slots, lenses, transactions, token budgets",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -23,9 +23,9 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && tsc && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({type:'commonjs'}))\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --ignoreConfig --noEmit --strict --target ES2020 --moduleResolution bundler --module ESNext test/lens-types.ts",
     "test": "bun test",
-    "prepublishOnly": "bun test && npm run build"
+    "prepublishOnly": "npm run typecheck && bun test && npm run build"
   },
   "repository": {
     "type": "git",

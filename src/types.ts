@@ -2,7 +2,8 @@
  * Mosaic — Core Types
  *
  * Domain-specific state management for LLM context.
- * Framework-agnostic — no application-specific imports.
+ * Used by context, lens and rendering consumers; depends on no application schema.
+ * Typed slot references retain their value types through lenses. Chat turns are not scenario indices.
  */
 
 // ── Logger ──────────────────────────────────────────────────────────
@@ -23,6 +24,8 @@ export interface CtxMessage {
   role: MessageRole;
   content: string;
   timestamp: Date;
+  /** Zero-based chat turn at insertion; absent only on messages restored from older snapshots. */
+  readonly turn?: number;
   /** Arbitrary metadata attached by the application */
   metadata?: Record<string, unknown>;
   /** Explicit tags set at write time — replaces content-parsing hacks.
@@ -53,16 +56,16 @@ export interface KnowledgeChunk {
 /** Constraints for knowledge in a lens */
 export interface KnowledgeLensConfig {
   /** Which sources to include (omit for all) */
-  sources?: string[];
+  readonly sources?: readonly string[];
   /** Maximum number of items to return */
-  top?: number;
+  readonly top?: number;
   /** Minimum score threshold */
-  minScore?: number;
+  readonly minScore?: number;
   /** Optional predicate — chunk is excluded when returns false. Framework-agnostic;
    *  callers inject application logic via closures. Applied after source/minScore
-   *  filters and before sort/top. Lenses with where-closures that capture mutable
-   *  state must be rebuilt per turn since the view cache keys on lens name. */
-  where?: (chunk: KnowledgeChunk) => boolean;
+   *  filters and before sort/top. Replace the lens definition when a captured parameter
+   *  outside this context changes; external mutations cannot invalidate its cached view. */
+  readonly where?: (chunk: KnowledgeChunk) => boolean;
 }
 
 // ── Messages (continued) ────────────────────────────────────────────
@@ -159,35 +162,46 @@ export interface TransactionSummary {
 
 // ── Lenses ──────────────────────────────────────────────────────────
 
-/** Lens definition — declares what a consumer needs from the context */
-export interface LensDef {
+/** Slot references are covariant in their deserialized value; serializers need not be type-erased. */
+export type LensSlots = '*' | readonly string[] | Readonly<Record<string, Pick<SlotDef, 'name' | 'deserialize'>>>;
+
+/** A reference map preserves each selected slot's value type; name-only selectors remain untyped. */
+export type LensSlotValues<Slots> =
+  Slots extends Readonly<Record<string, Pick<SlotDef, 'name' | 'deserialize'>>>
+    ? { readonly [Key in keyof Slots]: Slots[Key] extends SlotDef<infer Value> ? Value | undefined : unknown }
+    : Readonly<Record<string, unknown>>;
+
+/** An immutable selection definition; its object identity, not its display name, identifies cached views. */
+export interface LensDef<Slots extends LensSlots | undefined = LensSlots | undefined> {
   /** Lens name (for logging/debugging) */
   readonly name: string;
   /** Message constraints */
   readonly messages?: {
     /** Maximum number of recent messages to include */
-    last?: number;
+    readonly last?: number;
+    /** Chat-turn window including the current turn; omitted means all retained turns, not unlimited retention. */
+    readonly turns?: 'current' | { readonly last: number };
     /** Maximum character length per message content */
-    maxChars?: number;
+    readonly maxChars?: number;
     /** Generic filter function — return false to exclude a message.
      *  Applied before `last` and `maxChars` constraints.
      *  Use this for application-specific filtering (e.g., skip refusals). */
-    filter?: (msg: CtxMessage, index: number, all: CtxMessage[]) => boolean;
+    readonly filter?: (msg: CtxMessage, index: number, all: CtxMessage[]) => boolean;
   };
-  /** Which slots this lens can access — '*' for all, or array of slot names */
-  readonly slots?: '*' | string[];
+  /** Typed alias-to-slot references, or the existing untyped '*' / slot-name selectors. Not an authorization boundary. */
+  readonly slots?: Slots;
   /** Knowledge chunk constraints (omit to exclude knowledge from this lens) */
   readonly knowledge?: KnowledgeLensConfig;
 }
 
 /** The view returned by a lens — scoped, read-only access to context */
-export interface LensView {
+export interface LensView<Slots extends LensSlots | undefined = LensSlots | undefined> {
   /** Lens name */
   readonly name: string;
   /** Filtered messages according to lens constraints */
   readonly messages: readonly CtxMessage[];
-  /** Scoped slot access — returns value if declared, undefined + warning if not */
-  readonly slots: Record<string, unknown>;
+  /** Selected values retain their types; undeclared runtime access keeps the existing soft warning behavior. */
+  readonly slots: LensSlotValues<Slots>;
   /** Knowledge chunks (filtered by lens config, sorted by score descending) */
   readonly knowledge: readonly KnowledgeChunk[];
   /** Message count (of the filtered set) */
@@ -228,6 +242,8 @@ export interface ContextSnapshot {
     role: MessageRole;
     content: string;
     timestamp: string; // ISO string for JSON safety
+    /** Original chat turn; absent on snapshots written before turn-stamped messages were introduced. */
+    turn?: number;
     metadata?: Record<string, unknown>;
     tags?: Record<string, string>;
   }>;

@@ -3,7 +3,7 @@
 Context management for LLM applications.
 
 <p>
-  <img src="https://img.shields.io/badge/version-1.1.1-7dcfff?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-1.2.0-7dcfff?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/typescript-strict-bb9af7?style=flat-square" alt="typescript">
   <img src="https://img.shields.io/badge/tests-bun-9ece6a?style=flat-square" alt="tests">
   <img src="https://img.shields.io/badge/license-MIT-e0af68?style=flat-square" alt="license">
@@ -149,7 +149,36 @@ const { static: essential, transient: optional, internal } = ctx.slotsByPersiste
 
 ### Lenses
 
-Scoped, read-only views that declare what each consumer needs.
+Scoped views declare what each consumer needs. They organize application reads; they are not a security boundary. Use a reference map to preserve slot value types without casts, reflection or reparsing:
+
+```typescript
+const product = ctx.defineSlot<{ code: string }>('support.product');
+const reports = ctx.defineSlot<string[]>('support.reports');
+const interpretation = defineLens('interpretation', {
+  slots: { product, reports },
+});
+const selected = ctx.through(interpretation);
+selected.slots.product; // { code: string } | undefined
+selected.slots.reports; // string[] | undefined
+```
+
+Unset values remain explicit. The map keys are consumer-facing aliases for slot references; no second state copy lives in the definition. Slot-name arrays and `'*'` remain available for existing untyped consumers. Undeclared runtime reads still warn and return the value, and write ownership behavior is unchanged.
+
+`defineLens` captures immutable selection options. A lens name is a diagnostic label, not a cache key: two definitions with the same name have separate cached views. Reusing the same definition while the context is unchanged reuses its view. A slot write, staged change, message insertion, restore or turn advance invalidates cached views. Do not mutate a structural lens literal passed directly to `through`; use `defineLens` to capture its options.
+
+### Chat turns and message windows
+
+Turns belong to a chat, not a scenario, UI page or individual model call. The adapter calls `nextTurn()` once at each new logical chat turn. `addMessage` stamps every message with the current zero-based `turnCount`; multiple customer, attachment-caption and assistant entries may share it. Adding a message does not advance the counter.
+
+```typescript
+const current = defineLens('current', { messages: { turns: 'current' } });
+const rolling = defineLens('rolling', { messages: { turns: { last: 3 } } });
+const cumulative = defineLens('cumulative', {});
+```
+
+The rolling window includes the current turn and the preceding two turn numbers, including any empty turns; it is not the last three messages. Turn filtering happens before the optional message predicate, `last` message cap and `maxChars` projection. Omitting `turns` selects all retained turns. A lens never deletes stored messages: retention is still controlled by `maxMessages` (default 50; zero disables trimming). No scenario-length limit is introduced.
+
+Snapshots preserve the chat counter and each message's original turn. Resume the same snapshot when reopening a chat; do not reset the counter when loading a page. Trimming older messages never renumbers the remaining ones. Legacy snapshots without message turns remain readable: those messages stay in cumulative views but are excluded from turn-specific windows, rather than being assigned a guessed turn. Invalid or future message turns are rejected before restore mutates the context.
 
 <p align="center"> <img src="docs/lenses.svg" alt="Lens Scoping" width="720">
 </p>
@@ -283,10 +312,7 @@ view.knowledge;   // only parameter-tagged chunks
 
 The `where` closure reads from `chunk.meta` — an opaque `Record<string, unknown>` that Mosaic never inspects. Your application layer decides what tags to attach when calling `addKnowledge`, and what predicates to apply at read time.
 
-> **View cache + closures.** `ctx.through(lens)` memoizes lens views by lens
-> name until the context mutates (`addKnowledge`, `addMessage`, slot write,
-> `nextTurn`). A lens with a `where` closure that captures mutable state must
-> be rebuilt per turn so the cache sees a fresh lens object.
+> **View cache + closures.** `ctx.through(lens)` memoizes by definition object, not name. Context mutations invalidate the cache. If a predicate captures parameters outside Mosaic, replace the lens definition when those parameters change; Mosaic cannot observe external mutations. Merely changing captured data while reusing the same definition does not invalidate its cached view.
 
 ### Message Queries
 
@@ -463,7 +489,7 @@ async function handleTurn(userMessage: string) {
 }
 ```
 
-Each agent only sees what it declared in its lens. The router gets 1 message and 2 slots (fast). The retriever gets 5 messages and 3 slots (enough for query rewriting). The synthesizer gets everything including knowledge chunks (full context for generation). All mutations are staged in a transaction and committed atomically at the end. Internal slots like `retryCount` are system bookkeeping — they participate in transactions but are never rendered to the LLM or included in the token budget.
+Each lens projects its declared messages, slots and knowledge. The router gets 1 message and 2 slots, the retriever gets 5 messages and 3 slots, and the synthesizer includes knowledge chunks. In this example, slot mutations are staged and committed atomically. This is context organization, not authorization: undeclared slot reads retain soft warning behavior, and the application's renderer and budget must omit internal bookkeeping slots such as `retryCount`.
 
 ## Logger
 

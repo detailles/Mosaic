@@ -5,7 +5,8 @@
  * Holds messages + typed slots. Provides query methods, lenses,
  * transactions, and inspection for organized context management.
  *
- * Framework-agnostic — no application-specific imports.
+ * Framework-agnostic — no application-specific imports. Chat adapters own turn boundaries;
+ * this manager stamps and persists them without inferring turns from messages or scenario steps.
  */
 
 import type {
@@ -15,6 +16,8 @@ import type {
   ILogger,
   KnowledgeChunk,
   LensDef,
+  LensSlots,
+  LensSlotValues,
   LensView,
   MessagePair,
   MessageRole,
@@ -44,7 +47,7 @@ export class ContextManager {
   private _callerIdentity: string | null = null;
   private _turnCount = 0;
   private _activeTransaction: TurnTransaction | null = null;
-  private _viewCache: Map<string, LensView> = new Map();
+  private _viewCache = new WeakMap<LensDef, LensView>();
   private readonly logger: ILogger;
 
   private readonly maxMessages: number;
@@ -69,12 +72,13 @@ export class ContextManager {
 
   // ── Message Operations ──────────────────────────────────────────
 
-  /** Append a message and trim to `maxMessages`. Invalidates cached lens views. */
+  /** Append a message in the current chat turn and trim to `maxMessages`, without renumbering retained messages. */
   addMessage(role: MessageRole, content: string, options?: { metadata?: Record<string, unknown>; tags?: Record<string, string> }): void {
     this._messages.push({
       role,
       content,
       timestamp: new Date(),
+      turn: this._turnCount,
       metadata: options?.metadata,
       tags: options?.tags,
     });
@@ -82,7 +86,7 @@ export class ContextManager {
     if (this.maxMessages > 0 && this._messages.length > this.maxMessages) {
       this._messages = this._messages.slice(-this.maxMessages);
     }
-    this._viewCache.clear();
+    this._invalidateViews();
   }
 
   /** All retained messages, oldest first. The array is live — do not mutate it. */
@@ -199,12 +203,12 @@ export class ContextManager {
     for (const chunk of chunks) {
       this._knowledge.push({ content: chunk.content, score: chunk.score, source, meta: chunk.meta });
     }
-    this._viewCache.clear();
+    this._invalidateViews();
   }
 
   /** Get all knowledge chunks, optionally filtered by source. Sorted by score descending.
    *  Filter order: sources → minScore → where → sort → top. */
-  getKnowledge(options?: { sources?: string[]; top?: number; minScore?: number; where?: (chunk: KnowledgeChunk) => boolean }): KnowledgeChunk[] {
+  getKnowledge(options?: { sources?: readonly string[]; top?: number; minScore?: number; where?: (chunk: KnowledgeChunk) => boolean }): KnowledgeChunk[] {
     let items = [...this._knowledge];
 
     if (options?.sources) {
@@ -231,7 +235,7 @@ export class ContextManager {
   /** Clear all knowledge chunks (called at start of each turn) */
   clearKnowledge(): void {
     this._knowledge = [];
-    this._viewCache.clear();
+    this._invalidateViews();
   }
 
   /** Get the total number of knowledge chunks */
@@ -305,7 +309,7 @@ export class ContextManager {
     if (def?.lifecycle === 'consume-once') {
       state.value = undefined;
       // Consuming is a mutation: cached lens views holding the pre-consume value are stale.
-      this._viewCache.clear();
+      this._invalidateViews();
     }
 
     return value;
@@ -362,14 +366,14 @@ export class ContextManager {
         lastSetAtTurn: this._turnCount,
         writeCount: 1,
       });
-      this._viewCache.clear();
+      this._invalidateViews();
       return;
     }
 
     state.value = isolated;
     state.lastSetAtTurn = this._turnCount;
     state.writeCount++;
-    this._viewCache.clear();
+    this._invalidateViews();
   }
 
   /** Internal: the value a reader sees right now — staged change first, committed state otherwise. */
@@ -381,9 +385,9 @@ export class ContextManager {
     return this.slots.get(name)?.value;
   }
 
-  /** Internal: lens views are cached per lens name; any staged or committed change invalidates them. */
+  /** Internal: any staged or committed change invalidates definition-scoped cached views. */
   _invalidateViews(): void {
-    this._viewCache.clear();
+    this._viewCache = new WeakMap();
   }
 
   /**
@@ -427,7 +431,7 @@ export class ContextManager {
     const state = this.slots.get(slot.name);
     if (state) {
       state.value = undefined;
-      this._viewCache.clear();
+      this._invalidateViews();
     }
   }
 
@@ -497,14 +501,21 @@ export class ContextManager {
 
   /**
    * Get a scoped, read-only view of the context through a lens.
-   * Messages and slots are filtered/constrained per the lens definition.
+   * Messages and slots are filtered/constrained per immutable lens definition, not display name.
    * Accessing an undeclared slot logs a warning and returns the value (soft enforcement).
    */
-  through(lens: LensDef): LensView {
-    const cached = this._viewCache.get(lens.name);
-    if (cached) return cached;
+  through<Slots extends LensSlots | undefined>(lens: LensDef<Slots>): LensView<Slots> {
+    const cached = this._viewCache.get(lens);
+    if (cached) return cached as LensView<Slots>;
 
     let messages = [...this.getMessages()];
+
+    const turns = lens.messages?.turns;
+    if (turns !== undefined) {
+      const count = turns === 'current' ? 1 : clampCount(turns.last);
+      const first = Math.max(0, this._turnCount - count + 1);
+      messages = count === 0 ? [] : messages.filter((message) => message.turn !== undefined && message.turn >= first && message.turn <= this._turnCount);
+    }
 
     // Apply generic filter (application-specific, e.g., skip refusals)
     if (lens.messages?.filter) {
@@ -535,16 +546,20 @@ export class ContextManager {
       for (const name of slotSource.keys()) {
         allSlotValues[name] = effective(name);
       }
-    } else if (allowedSlots) {
+    } else if (Array.isArray(allowedSlots)) {
       for (const name of allowedSlots) {
         allSlotValues[name] = effective(name);
+      }
+    } else if (allowedSlots) {
+      for (const [alias, slot] of Object.entries(allowedSlots)) {
+        allSlotValues[alias] = effective(slot.name);
       }
     }
 
     const slotsProxy = new Proxy(allSlotValues, {
       get(target, prop: string) {
         if (prop in target) return target[prop];
-        if (allowedSlots !== '*' && allowedSlots && !allowedSlots.includes(prop)) {
+        if (allowedSlots !== '*' && allowedSlots) {
           logger.warn(`[Mosaic] Lens "${lensName}" accessed undeclared slot "${prop}" — add it to the lens definition`);
         }
         return effective(prop);
@@ -554,15 +569,15 @@ export class ContextManager {
     // Filter knowledge per lens config
     const knowledge = lens.knowledge ? this.getKnowledge(lens.knowledge) : [];
 
-    const view: LensView = {
+    const view: LensView<Slots> = {
       name: lens.name,
       messages,
-      slots: slotsProxy,
+      slots: slotsProxy as LensSlotValues<Slots>,
       knowledge,
       messageCount: messages.length,
       depth: this.depth(),
     };
-    this._viewCache.set(lens.name, view);
+    this._viewCache.set(lens, view);
     return view;
   }
 
@@ -593,13 +608,14 @@ export class ContextManager {
 
   // ── Turn Tracking ───────────────────────────────────────────────
 
-  /** Number of completed turns — incremented by `nextTurn()`, restored by `restore()`. */
+  /** Current zero-based chat turn; only `nextTurn()` advances it, and snapshot/restore preserves it. */
   get turnCount(): number {
     return this._turnCount;
   }
 
   /**
-   * Advance the turn counter and clear turn-scoped state: `turn-scoped` slot
+   * Advance at the application's next logical chat turn, not on pagination or every message.
+   * Clear turn-scoped state: `turn-scoped` slot
    * values and all knowledge chunks. Invalidates cached lens views.
    * @returns The new turn count.
    * @throws If a transaction is open — advancing would mutate committed state
@@ -623,7 +639,7 @@ export class ContextManager {
 
     // Clear knowledge (turn-scoped by nature — new retrieval each turn)
     this._knowledge = [];
-    this._viewCache.clear();
+    this._invalidateViews();
 
     return this._turnCount;
   }
@@ -667,6 +683,7 @@ export class ContextManager {
         role: m.role,
         content: m.content,
         timestamp: m.timestamp.toISOString(),
+        ...(m.turn !== undefined ? { turn: m.turn } : {}),
         metadata: m.metadata,
         tags: m.tags,
       })),
@@ -687,6 +704,13 @@ export class ContextManager {
     if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.messages) || !snapshot.slots || typeof snapshot.slots !== 'object' || !Number.isInteger(snapshot.turnCount)) {
       throw new Error('[Mosaic] Snapshot shape is invalid');
     }
+    if (
+      !Number.isSafeInteger(snapshot.turnCount) ||
+      snapshot.turnCount < 0 ||
+      snapshot.messages.some((message) => message.turn !== undefined && (!Number.isSafeInteger(message.turn) || message.turn < 0 || message.turn > snapshot.turnCount))
+    ) {
+      throw new Error('[Mosaic] Snapshot chat turn is invalid');
+    }
     const restored = new Map<string, unknown>();
     for (const [name, rawValue] of Object.entries(snapshot.slots)) {
       const def = this.slotDefs.get(name);
@@ -698,6 +722,7 @@ export class ContextManager {
       role: m.role,
       content: m.content,
       timestamp: new Date(m.timestamp),
+      ...(m.turn !== undefined ? { turn: m.turn } : {}),
       metadata: m.metadata,
       tags: m.tags,
     }));
@@ -711,7 +736,7 @@ export class ContextManager {
 
     this._knowledge = [];
     this._turnCount = snapshot.turnCount;
-    this._viewCache.clear();
+    this._invalidateViews();
   }
 }
 
