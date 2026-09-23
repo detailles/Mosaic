@@ -94,6 +94,21 @@ describe('TokenBudget.compile() boundary conditions', () => {
     expect(result.sections.system).toEqual(['first']);
   });
 
+  it('copies reserved items so later caller mutation cannot desync content and token counts', () => {
+    // reserveItems() computes section tokens at reserve time. If it stores the
+    // caller's item objects by reference, later mutation can make compile()
+    // return oversized content while reporting the old small token count.
+    const budget = new TokenBudget({ limit: 1, countTokens: (text) => text.length });
+    const item = { content: 'a' };
+    budget.reserveItems('section', [item], { priority: 'fixed' });
+    item.content = 'aaaaaaaaaa';
+
+    const result = budget.compile();
+    expect(result.sections.section).toEqual(['a']);
+    expect(result.sectionUsage.section).toBe(1);
+    expect(result.usage.used).toBe(1);
+  });
+
   it('keeps every section when the total exactly equals the limit (inclusive boundary)', () => {
     // Pins the <= boundary: an exact fit must not trigger the shrink/drop path.
     const budget = new TokenBudget({ limit: 25, countTokens: estimateTokens });

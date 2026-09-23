@@ -226,7 +226,7 @@ export class ContextManager {
     items.sort((a, b) => b.score - a.score);
 
     if (options?.top !== undefined) {
-      items = items.slice(0, options.top);
+      items = items.slice(0, clampCount(options.top));
     }
 
     return items;
@@ -851,7 +851,7 @@ export class TurnTransaction {
 
     // The last operation wins here too: clearing a slot that was only set inside this transaction
     // drops the staged set (unset -> set -> clear ends unset); clearing a committed value stages a clear.
-    if (previousValue === undefined || previousValue === null) {
+    if (previousValue === undefined) {
       this.staged.delete(slot.name);
       this.ctx._invalidateViews();
       return;

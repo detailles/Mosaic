@@ -504,6 +504,22 @@ describe('TurnTransaction', () => {
     expect(turn.summary().changeCount).toBe(0);
   });
 
+  it('stages clear on null slots because null is a stored value', () => {
+    const ctx = new ContextManager();
+    const nullable = ctx.defineSlot<string | null>('nullable');
+    ctx.set(nullable, null);
+
+    const turn = ctx.beginTurn();
+    turn.clear(nullable);
+
+    expect(turn.summary().changeCount).toBe(1);
+    expect(ctx.has(nullable)).toBe(false);
+    expect(ctx.get(nullable)).toBeUndefined();
+    turn.commit();
+    expect(ctx.has(nullable)).toBe(false);
+    expect(ctx.peek(nullable)).toBeUndefined();
+  });
+
   it('detects changes in arrays', () => {
     const ctx = new ContextManager();
     const terms = ctx.defineSlot<string[]>('terms');
@@ -770,6 +786,20 @@ describe('Knowledge', () => {
     ]);
 
     expect(ctx.getKnowledge({ top: 2 })).toHaveLength(2);
+  });
+
+  it('normalizes top like other count helpers', () => {
+    const ctx = new ContextManager();
+    ctx.addKnowledge('rag', [
+      { content: 'a', score: 0.9 },
+      { content: 'b', score: 0.8 },
+      { content: 'c', score: 0.7 },
+    ]);
+
+    expect(ctx.getKnowledge({ top: 0 })).toEqual([]);
+    expect(ctx.getKnowledge({ top: -1 })).toEqual([]);
+    expect(ctx.getKnowledge({ top: Number.NaN })).toEqual([]);
+    expect(ctx.getKnowledge({ top: 2.8 }).map((chunk) => chunk.content)).toEqual(['a', 'b']);
   });
 
   it('clears on nextTurn', () => {

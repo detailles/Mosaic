@@ -1,6 +1,6 @@
 {
   "name": "@detailles/mosaic",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Context management for LLM applications — typed slots, lenses, transactions, token budgets",
   "type": "module",
   "main": "./dist/cjs/index.js",

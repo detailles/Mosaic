@@ -150,11 +150,12 @@ export class TokenBudget {
       throw new Error(`[Mosaic] Budget section "${name}" is already reserved`);
     }
     const priority = options?.priority ?? 'medium';
-    const totalTokens = items.reduce((sum, item) => sum + this.countTokens(item.content), 0);
+    const reservedItems = items.map((item) => (item.score === undefined ? { content: item.content } : { content: item.content, score: item.score }));
+    const totalTokens = reservedItems.reduce((sum, item) => sum + this.countTokens(item.content), 0);
 
     this.sections.push({
       name,
-      items,
+      items: reservedItems,
       tokens: totalTokens,
       priority,
       strategy: options?.strategy ?? 'none',
