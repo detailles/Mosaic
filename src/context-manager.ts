@@ -51,6 +51,11 @@ export class ContextManager {
   private _turnCount = 0;
   private _activeTransaction: TurnTransaction | null = null;
   private _viewCache = new WeakMap<LensDef, LensView>();
+  private _revision = 0;
+  private _retainedBytes = 128;
+  private _messageSizes: number[] = [];
+  private _knowledgeBytes = 0;
+  private readonly _slotSizes = new Map<string, number>();
   private readonly logger: ILogger;
 
   private readonly maxMessages: number;
@@ -65,6 +70,19 @@ export class ContextManager {
     this.logger = options?.logger ?? NOOP_LOGGER;
   }
 
+  /** Monotonic committed-mutation counter for session persistence; staged writes do not advance it. */
+  get revision(): number {
+    return this._revision;
+  }
+
+  /**
+   * Incremental estimate of data owned by this context, not process RSS or exact heap usage.
+   * External message adapters and mutations to borrowed mutable values are not tracked.
+   */
+  get estimatedRetainedBytes(): number {
+    return this._retainedBytes + (this._activeTransaction?.estimatedRetainedBytes ?? 0);
+  }
+
   /**
    * Access the message array. Subclasses (adapters) override this
    * to read from external sources without copying data.
@@ -77,18 +95,25 @@ export class ContextManager {
 
   /** Append a message in the current chat turn and trim to `maxMessages`, without renumbering retained messages. */
   addMessage(role: MessageRole, content: string, options?: { metadata?: Record<string, unknown>; tags?: Record<string, string> }): void {
-    this._messages.push({
+    const message: CtxMessage = {
       role,
       content,
       timestamp: new Date(),
       turn: this._turnCount,
       metadata: options?.metadata,
       tags: options?.tags,
-    });
+    };
+    const bytes = estimateOwnedBytes(message);
+    this._messages.push(message);
+    this._messageSizes.push(bytes);
+    this._retainedBytes += bytes;
 
     if (this.maxMessages > 0 && this._messages.length > this.maxMessages) {
+      const trimmed = this._messages.length - this.maxMessages;
+      for (const size of this._messageSizes.splice(0, trimmed)) this._retainedBytes -= size;
       this._messages = this._messages.slice(-this.maxMessages);
     }
+    this._revision++;
     this._invalidateViews();
   }
 
@@ -204,8 +229,13 @@ export class ContextManager {
   /** Append knowledge retained across chat turns and snapshots; call clearKnowledge() explicitly for a fresh set. */
   addKnowledge(source: string, chunks: Array<{ content: string; score: number; meta?: Record<string, unknown> }>): void {
     for (const chunk of chunks) {
-      this._knowledge.push({ content: chunk.content, score: chunk.score, source, meta: chunk.meta });
+      const retained = { content: chunk.content, score: chunk.score, source, meta: chunk.meta };
+      const bytes = estimateOwnedBytes(retained);
+      this._knowledge.push(retained);
+      this._knowledgeBytes += bytes;
+      this._retainedBytes += bytes;
     }
+    if (chunks.length) this._revision++;
     this._invalidateViews();
   }
 
@@ -237,6 +267,9 @@ export class ContextManager {
 
   /** Explicitly discard all retained knowledge and invalidate its lens views. */
   clearKnowledge(): void {
+    if (this._knowledge.length) this._revision++;
+    this._retainedBytes -= this._knowledgeBytes;
+    this._knowledgeBytes = 0;
     this._knowledge = [];
     this._invalidateViews();
   }
@@ -275,7 +308,9 @@ export class ContextManager {
       persistence: options?.persistence,
     };
 
+    const previousDef = this.slotDefs.get(name);
     this.slotDefs.set(name, def as SlotDef);
+    if (this.slots.get(name)?.value !== undefined && previousDef?.serialize !== def.serialize) this._revision++;
 
     if (!this.slots.has(name)) {
       this.slots.set(name, {
@@ -283,6 +318,7 @@ export class ContextManager {
         lastSetAtTurn: 0,
         writeCount: 0,
       });
+      this._measureSlot(name, undefined);
     }
 
     return def;
@@ -310,9 +346,7 @@ export class ContextManager {
 
     const def = this.slotDefs.get(slot.name);
     if (def?.lifecycle === 'consume-once') {
-      state.value = undefined;
-      // Consuming is a mutation: cached lens views holding the pre-consume value are stale.
-      this._invalidateViews();
+      this._clearDirect(slot);
     }
 
     return value;
@@ -362,6 +396,8 @@ export class ContextManager {
    *  cannot change committed state behind the transaction (and rollback) boundary. */
   _commitDirect<T>(slot: SlotDef<T>, value: T): void {
     const isolated = isolate(value);
+    this._measureSlot(slot.name, isolated);
+    this._revision++;
     const state = this.slots.get(slot.name);
     if (!state) {
       this.slots.set(slot.name, {
@@ -433,9 +469,18 @@ export class ContextManager {
   _clearDirect(slot: Pick<SlotDef, 'name'>): void {
     const state = this.slots.get(slot.name);
     if (state) {
+      if (state.value !== undefined) this._revision++;
       state.value = undefined;
+      this._measureSlot(slot.name, undefined);
       this._invalidateViews();
     }
+  }
+
+  /** Replace one slot's cached data estimate without rescanning other retained values. */
+  private _measureSlot(name: string, value: unknown): void {
+    const bytes = 48 + name.length * 2 + estimateOwnedBytes(value);
+    this._retainedBytes += bytes - (this._slotSizes.get(name) ?? 0);
+    this._slotSizes.set(name, bytes);
   }
 
   /**
@@ -629,6 +674,7 @@ export class ContextManager {
       throw new Error('[Mosaic] Cannot advance turn while a transaction is open');
     }
     this._turnCount++;
+    this._revision++;
 
     // Clear turn-scoped slots
     for (const [name, def] of this.slotDefs) {
@@ -636,6 +682,7 @@ export class ContextManager {
         const state = this.slots.get(name);
         if (state) {
           state.value = undefined;
+          this._measureSlot(name, undefined);
         }
       }
     }
@@ -754,6 +801,12 @@ export class ContextManager {
 
     this._knowledge = knowledge;
     this._turnCount = snapshot.turnCount;
+    this._messageSizes = this._messages.map((message) => estimateOwnedBytes(message));
+    this._knowledgeBytes = knowledge.reduce((bytes, chunk) => bytes + estimateOwnedBytes(chunk), 0);
+    this._retainedBytes = 128 + this._knowledgeBytes + this._messageSizes.reduce((bytes, size) => bytes + size, 0);
+    this._slotSizes.clear();
+    for (const [name, state] of this.slots) this._measureSlot(name, state.value);
+    this._revision++;
     this._invalidateViews();
   }
 }
@@ -824,12 +877,19 @@ export class TurnTransaction {
   /** Internal: staged changes by slot name; read by the owning context for read-your-writes. */
   readonly staged: Map<string, StagedChange> = new Map();
   private _status: 'open' | 'committed' | 'rolled-back' = 'open';
+  private _retainedBytes = 0;
+  private readonly _changeSizes = new Map<string, number>();
 
   constructor(private readonly ctx: ContextManager) {}
 
   /** Lifecycle state of this transaction: `open`, `committed`, or `rolled-back`. */
   get status(): 'open' | 'committed' | 'rolled-back' {
     return this._status;
+  }
+
+  /** Estimate of newly staged data; previous values remain owned and counted by the context. */
+  get estimatedRetainedBytes(): number {
+    return this._retainedBytes;
   }
 
   /**
@@ -845,6 +905,7 @@ export class TurnTransaction {
     // for the slot (A -> B -> A ends with nothing to write) instead of leaving B staged.
     if (valuesEqual(previousValue, value)) {
       this.staged.delete(slot.name);
+      this.measureChange(slot.name);
       this.ctx._invalidateViews();
       return;
     }
@@ -855,6 +916,7 @@ export class TurnTransaction {
       value: isolate(value),
       previousValue,
     });
+    this.measureChange(slot.name);
     this.ctx._invalidateViews();
   }
 
@@ -871,6 +933,7 @@ export class TurnTransaction {
     // drops the staged set (unset -> set -> clear ends unset); clearing a committed value stages a clear.
     if (previousValue === undefined) {
       this.staged.delete(slot.name);
+      this.measureChange(slot.name);
       this.ctx._invalidateViews();
       return;
     }
@@ -880,6 +943,7 @@ export class TurnTransaction {
       action: 'clear',
       previousValue,
     });
+    this.measureChange(slot.name);
     this.ctx._invalidateViews();
   }
 
@@ -933,6 +997,8 @@ export class TurnTransaction {
   rollback(): void {
     this.assertOpen();
     this.staged.clear();
+    this._changeSizes.clear();
+    this._retainedBytes = 0;
     this._status = 'rolled-back';
     this.ctx._clearTransaction();
     // Views built while the changes were staged must not survive the rollback.
@@ -944,6 +1010,42 @@ export class TurnTransaction {
       throw new Error(`[Mosaic] Transaction is ${this._status} — cannot modify`);
     }
   }
+
+  /** Update only the last staged value for a slot, excluding the already-counted previous value. */
+  private measureChange(name: string): void {
+    const change = this.staged.get(name);
+    const bytes = change ? 48 + name.length * 2 + estimateOwnedBytes(change.value) : 0;
+    this._retainedBytes += bytes - (this._changeSizes.get(name) ?? 0);
+    if (change) this._changeSizes.set(name, bytes);
+    else this._changeSizes.delete(name);
+  }
+}
+
+/** Estimate retained data at a mutation boundary without invoking serializers, getters or toJSON. */
+function estimateOwnedBytes(value: unknown, seen = new Set<object>()): number {
+  if (value === null || value === undefined) return 8;
+  if (typeof value === 'string') return 16 + value.length * 2;
+  if (typeof value !== 'object') return typeof value === 'function' ? 64 : 8;
+  if (seen.has(value)) return 8;
+  seen.add(value);
+  if (value instanceof Date) return 24;
+  if (value instanceof ArrayBuffer) return 32 + value.byteLength;
+  if (ArrayBuffer.isView(value)) return 32 + value.byteLength;
+  if (value instanceof Map) {
+    let bytes = 48;
+    for (const [key, entry] of value) bytes += 16 + estimateOwnedBytes(key, seen) + estimateOwnedBytes(entry, seen);
+    return bytes;
+  }
+  if (value instanceof Set) {
+    let bytes = 48;
+    for (const entry of value) bytes += 8 + estimateOwnedBytes(entry, seen);
+    return bytes;
+  }
+  let bytes = 32;
+  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+    bytes += 16 + key.length * 2 + ('value' in descriptor ? estimateOwnedBytes(descriptor.value, seen) : 0);
+  }
+  return bytes;
 }
 
 /**

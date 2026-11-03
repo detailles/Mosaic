@@ -9,6 +9,8 @@
 import type { LensDef, LensSlots } from './types.js';
 
 export { ContextManager, ScopedContextManager, TurnTransaction } from './context-manager.js';
+export { ContextSessions } from './context-sessions.js';
+export type { ContextSessionsOptions } from './context-sessions.js';
 export type { RenderOptions } from './renderers.js';
 export { renderConversationSummary, renderRouterContext } from './renderers.js';
 export type { BudgetPriority, BudgetResult, ReserveOptions, ScoredItem, ShrinkStrategy, TokenCounter } from './token-budget.js';
