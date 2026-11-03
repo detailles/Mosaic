@@ -2,11 +2,12 @@
  * Mosaic — ContextManager
  *
  * Core class for managing LLM conversation context.
- * Holds messages + typed slots. Provides query methods, lenses,
+ * Holds messages, typed slots and session knowledge. Provides query methods, lenses,
  * transactions, and inspection for organized context management.
  *
  * Framework-agnostic — no application-specific imports. Chat adapters own turn boundaries;
  * this manager stamps and persists them without inferring turns from messages or scenario steps.
+ * Knowledge survives turn advances; lenses select it without deleting retained information.
  */
 
 import type {
@@ -38,6 +39,8 @@ const NOOP_LOGGER: ILogger = { warn: () => {} };
  * silent defaults); reads through `get()`/`has()`/`through()` see staged writes
  * of the open transaction (read-your-writes), while `peek()` always reads
  * committed state. At most one transaction may be open at a time.
+ * Knowledge retention belongs to the session, not the prompt: only explicit clearing or
+ * restoring another snapshot replaces it. The manager does not retrieve or refresh knowledge.
  */
 export class ContextManager {
   private _messages: CtxMessage[] = [];
@@ -198,7 +201,7 @@ export class ContextManager {
 
   // ── Knowledge ──────────────────────────────────────────────────
 
-  /** Add retrieved knowledge chunks. Appends to existing — call clearKnowledge() first for a fresh set. */
+  /** Append knowledge retained across chat turns and snapshots; call clearKnowledge() explicitly for a fresh set. */
   addKnowledge(source: string, chunks: Array<{ content: string; score: number; meta?: Record<string, unknown> }>): void {
     for (const chunk of chunks) {
       this._knowledge.push({ content: chunk.content, score: chunk.score, source, meta: chunk.meta });
@@ -232,7 +235,7 @@ export class ContextManager {
     return items;
   }
 
-  /** Clear all knowledge chunks (called at start of each turn) */
+  /** Explicitly discard all retained knowledge and invalidate its lens views. */
   clearKnowledge(): void {
     this._knowledge = [];
     this._invalidateViews();
@@ -615,8 +618,8 @@ export class ContextManager {
 
   /**
    * Advance at the application's next logical chat turn, not on pagination or every message.
-   * Clear turn-scoped state: `turn-scoped` slot
-   * values and all knowledge chunks. Invalidates cached lens views.
+   * Clear only `turn-scoped` slot values; retain session knowledge.
+   * Invalidates cached lens views without discarding their underlying knowledge.
    * @returns The new turn count.
    * @throws If a transaction is open — advancing would mutate committed state
    *   behind the transaction's back. Commit or roll back first.
@@ -637,8 +640,6 @@ export class ContextManager {
       }
     }
 
-    // Clear knowledge (turn-scoped by nature — new retrieval each turn)
-    this._knowledge = [];
     this._invalidateViews();
 
     return this._turnCount;
@@ -662,8 +663,8 @@ export class ContextManager {
 
   /**
    * Serialize the full context — messages (timestamps as ISO strings), slot
-   * values (via each slot's `serialize` when defined), and the turn count.
-   * Knowledge chunks are not included.
+   * values (via each slot's `serialize` when defined), knowledge and the turn count.
+   * Knowledge's plain metadata is copied so later mutations cannot alter the saved snapshot.
    * @throws If a transaction is open — a snapshot then would silently drop the
    *   staged changes. Commit or roll back first.
    */
@@ -688,14 +689,16 @@ export class ContextManager {
         tags: m.tags,
       })),
       slots: serializedSlots,
+      knowledge: this._knowledge.map((chunk) => isolate(chunk)),
       turnCount: this._turnCount,
     };
   }
 
   /**
    * Replace the whole context with a snapshot. Every snapshot slot must be defined and must
-   * deserialize before anything is mutated; slots absent from the snapshot are reset, cached lens
-   * views are dropped, and a restore during an open transaction is refused.
+   * deserialize before anything is mutated; knowledge is validated and copied before replacement.
+   * Legacy snapshots without knowledge restore an empty knowledge store. Slots absent from the
+   * snapshot are reset, cached lens views are dropped, and an open transaction forbids restore.
    */
   restore(snapshot: ContextSnapshot): void {
     if (this._activeTransaction?.status === 'open') {
@@ -710,6 +713,21 @@ export class ContextManager {
       snapshot.messages.some((message) => message.turn !== undefined && (!Number.isSafeInteger(message.turn) || message.turn < 0 || message.turn > snapshot.turnCount))
     ) {
       throw new Error('[Mosaic] Snapshot chat turn is invalid');
+    }
+    const knowledge: KnowledgeChunk[] = [];
+    if ('knowledge' in snapshot) {
+      if (!Array.isArray(snapshot.knowledge)) throw new Error('[Mosaic] Snapshot knowledge is invalid');
+      for (const chunk of snapshot.knowledge) {
+        if (
+          !chunk || typeof chunk !== 'object' ||
+          typeof chunk.content !== 'string' || typeof chunk.score !== 'number' || !Number.isFinite(chunk.score) ||
+          (chunk.source !== undefined && typeof chunk.source !== 'string') ||
+          (chunk.meta !== undefined && (chunk.meta === null || typeof chunk.meta !== 'object' || Array.isArray(chunk.meta)))
+        ) {
+          throw new Error('[Mosaic] Snapshot knowledge is invalid');
+        }
+        knowledge.push(isolate(chunk));
+      }
     }
     const restored = new Map<string, unknown>();
     for (const [name, rawValue] of Object.entries(snapshot.slots)) {
@@ -734,7 +752,7 @@ export class ContextManager {
       this.slots.set(name, { value: isolate(value), lastSetAtTurn: snapshot.turnCount, writeCount: 0 });
     }
 
-    this._knowledge = [];
+    this._knowledge = knowledge;
     this._turnCount = snapshot.turnCount;
     this._invalidateViews();
   }
@@ -929,9 +947,9 @@ export class TurnTransaction {
 }
 
 /**
- * Isolate a slot value: plain objects and arrays are deep-copied and deep-frozen so a reader that
- * mutates what it received cannot alter committed or staged state; other objects (Map, Date, class
- * instances) are stored as given because their serialization is owned by the slot definition.
+ * Isolate a slot or snapshot knowledge value: plain objects and arrays are deep-copied and
+ * deep-frozen so readers cannot mutate the saved copy. Other objects (Map, Date, class instances)
+ * are stored as given; custom slot serialization remains owned by the slot definition.
  */
 function isolate<T>(value: T): T {
   if (Array.isArray(value)) return Object.freeze(value.map((entry) => isolate(entry))) as unknown as T;

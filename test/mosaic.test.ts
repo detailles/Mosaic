@@ -1,10 +1,11 @@
 /**
  * Mosaic — Core library tests.
  * No application-specific imports — tests the framework-agnostic library.
+ * Knowledge lifecycle and snapshot cases protect retention without automatic prompt inclusion.
  */
 import { describe, expect, it } from 'bun:test';
 
-import { ContextManager, defineLens, estimateTokens, TokenBudget } from '../src/index.js';
+import { ContextManager, type ContextSnapshot, defineLens, estimateTokens, TokenBudget } from '../src/index.js';
 
 describe('ContextManager', () => {
   // ── Message Queries ─────────────────────────────────────────────
@@ -173,21 +174,36 @@ describe('ContextManager', () => {
   // ── Serialization ───────────────────────────────────────────────
 
   describe('snapshot / restore', () => {
-    it('round-trips messages and slots', () => {
+    it('round-trips messages, slots and retained knowledge without sharing metadata', () => {
       const ctx = new ContextManager();
       const product = ctx.defineSlot<string | null>('product');
       ctx.addMessage('user', 'What is MODEL-A?');
       ctx.set(product, 'MODEL-A');
+      const meta = { citations: [{ document: 'manual', page: 3 }] };
+      ctx.addKnowledge('rag', [{ content: 'first finding', score: 0.9, meta }]);
       ctx.nextTurn();
+      ctx.addKnowledge('tool', [{ content: 'second finding', score: 0.8 }]);
 
       const snap = ctx.snapshot();
+      const expectedKnowledge = [
+        { content: 'first finding', score: 0.9, source: 'rag', meta: { citations: [{ document: 'manual', page: 3 }] } },
+        { content: 'second finding', score: 0.8, source: 'tool' },
+      ];
+      meta.citations[0].page = 99;
+      expect(snap.knowledge).toEqual(expectedKnowledge);
+      const wire = JSON.parse(JSON.stringify(snap));
       const ctx2 = new ContextManager();
       ctx2.defineSlot<string | null>('product');
-      ctx2.restore(snap);
+      ctx2.restore(wire);
+      wire.knowledge[0].meta.citations[0].page = 100;
 
       expect(ctx2.messageCount).toBe(1);
       expect(ctx2.get(product)).toBe('MODEL-A');
       expect(ctx2.turnCount).toBe(1);
+      expect(ctx2.getKnowledge()).toEqual(expectedKnowledge);
+      ctx2.nextTurn();
+      expect(ctx2.getKnowledge()).toEqual(expectedKnowledge);
+      expect(ctx2.snapshot().knowledge).toEqual(expectedKnowledge);
     });
 
     it('uses custom serializer/deserializer for Map slots', () => {
@@ -802,13 +818,24 @@ describe('Knowledge', () => {
     expect(ctx.getKnowledge({ top: 2.8 }).map((chunk) => chunk.content)).toEqual(['a', 'b']);
   });
 
-  it('clears on nextTurn', () => {
+  it('retains knowledge across turns until explicitly cleared', () => {
     const ctx = new ContextManager();
     ctx.addKnowledge('rag', [{ content: 'chunk', score: 0.9 }]);
-    expect(ctx.knowledgeCount).toBe(1);
+    const lens = defineLens('reader', { knowledge: { sources: ['rag'], top: 1 } });
+    const withoutKnowledge = defineLens('conversation', {});
+    expect(ctx.through(lens).knowledge.map((chunk) => chunk.content)).toEqual(['chunk']);
 
     ctx.nextTurn();
+    ctx.addKnowledge('tool', [{ content: 'later finding', score: 1 }]);
+    ctx.nextTurn();
+    expect(ctx.knowledgeCount).toBe(2);
+    expect(ctx.through(lens).knowledge.map((chunk) => chunk.content)).toEqual(['chunk']);
+    expect(ctx.through(withoutKnowledge).knowledge).toEqual([]);
+    expect(ctx.getKnowledge().map((chunk) => chunk.content)).toEqual(['later finding', 'chunk']);
+    ctx.clearKnowledge();
     expect(ctx.knowledgeCount).toBe(0);
+    expect(ctx.through(lens).knowledge).toEqual([]);
+    expect(ctx.snapshot().knowledge).toEqual([]);
   });
 
   it('preserves meta', () => {
@@ -1014,13 +1041,14 @@ describe('Transaction and view invariants for typed-state integrations', () => {
     expect(ctx.through(lens).slots.product).toBe('MODEL-A');
   });
 
-  it('restore after a cached lens view drops the cache and resets slots absent from the snapshot', () => {
+  it('restore replaces cached knowledge and resets slots absent from the snapshot', () => {
     const ctx = new ContextManager();
     const product = ctx.defineSlot<string>('product');
     const topic = ctx.defineSlot<string>('topic');
     ctx.set(product, 'MODEL-A');
     ctx.set(topic, 'wiring');
-    const lens = { name: 'render', slots: '*' as const };
+    ctx.addKnowledge('rag', [{ content: 'saved finding', score: 0.8 }]);
+    const lens = { name: 'render', slots: '*' as const, knowledge: {} };
     expect(ctx.through(lens).slots.product).toBe('MODEL-A');
     const snap = ctx.snapshot();
     ctx.set(product, 'MODEL-B');
@@ -1030,20 +1058,43 @@ describe('Transaction and view invariants for typed-state integrations', () => {
     other.defineSlot<string>('product');
     other.defineSlot<string>('topic');
     other.set(other.defineSlot<string>('product'), 'STALE');
-    other.through(lens);
+    other.addKnowledge('rag', [{ content: 'stale finding', score: 0.9 }]);
+    expect(other.through(lens).knowledge.map((chunk) => chunk.content)).toEqual(['stale finding']);
     other.restore({ ...snap, slots: { product: 'MODEL-A' } });
     expect(other.through(lens).slots.product).toBe('MODEL-A');
     expect(other.peek(topic)).toBeUndefined();
     expect(other.has(topic)).toBe(false);
+    expect(other.through(lens).knowledge.map((chunk) => chunk.content)).toEqual(['saved finding']);
+    const legacy: ContextSnapshot = { messages: snap.messages, slots: snap.slots, turnCount: snap.turnCount };
+    other.restore(legacy);
+    expect(other.through(lens).knowledge).toEqual([]);
+    expect(other.knowledgeCount).toBe(0);
   });
 
-  it('restore validates before mutating: an undefined slot in the snapshot is refused and nothing changes', () => {
+  it('restore refuses invalid slots or knowledge before mutating the context', () => {
     const ctx = new ContextManager();
     const product = ctx.defineSlot<string>('product');
     ctx.set(product, 'MODEL-A');
     expect(() => ctx.restore({ messages: [], slots: { product: 'X', unknown: 1 }, turnCount: 3 })).toThrow('not defined');
     expect(ctx.peek(product)).toBe('MODEL-A');
     expect(ctx.turnCount).toBe(0);
+    ctx.addKnowledge('rag', [{ content: 'retained finding', score: 0.9 }]);
+    const before = ctx.snapshot();
+    const lens = defineLens('retained', { knowledge: {} });
+    const view = ctx.through(lens);
+    for (const knowledge of [
+      null, {}, [null],
+      [{ content: 1, score: 0.9 }],
+      [{ content: 'broken', score: 'high' }],
+      [{ content: 'broken', score: NaN }],
+      [{ content: 'broken', score: 1, source: 42 }],
+      [{ content: 'broken', score: 1, meta: [] }],
+    ]) {
+      const invalid = { messages: [], slots: { product: 'X' }, turnCount: 3, knowledge } as unknown as ContextSnapshot;
+      expect(() => ctx.restore(invalid)).toThrow('Snapshot knowledge is invalid');
+      expect(ctx.snapshot()).toEqual(before);
+      expect(ctx.through(lens)).toBe(view);
+    }
     const failing = new ContextManager();
     const count = failing.defineSlot<number>('count', {
       deserialize: (raw) => {

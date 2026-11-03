@@ -248,5 +248,7 @@ export interface ContextSnapshot {
     tags?: Record<string, string>;
   }>;
   slots: Record<string, unknown>;
+  /** Retained session knowledge; always emitted by snapshot(), absent only in legacy snapshots. */
+  knowledge?: KnowledgeChunk[];
   turnCount: number;
 }
