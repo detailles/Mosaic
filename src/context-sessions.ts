@@ -89,6 +89,11 @@ export class ContextSessions<T extends ContextManager = ContextManager> {
     this.assertKey(key);
     if (options.persist !== undefined && typeof options.persist !== 'boolean') throw new Error('[Mosaic] Session persist must be boolean');
     const persistent = options.persist !== false;
+    if (this.estimatedRetainedBytes > this.options.maxRetainedBytes) {
+      await this.sweep();
+      this.assertOpen();
+      if (this.estimatedRetainedBytes > this.options.maxRetainedBytes) throw new Error('[Mosaic] Retained session capacity exceeded by protected data');
+    }
     let entry = this.entries.get(key);
     if (this.active.has(key) || entry?.evicting) throw new Error(`[Mosaic] Session is busy: ${key}`);
     if (entry && entry.persist !== persistent) throw new Error(`[Mosaic] Session persistence mode cannot change: ${key}`);
